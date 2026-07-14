@@ -98,7 +98,9 @@ export function FunctionsPanel({ data, kind, targets, onChange }: FunctionsPanel
         </div>
       ) : (
         functions.map((fn, i) => (
-          <div key={`${fn.name}-${i}`} className="space-y-2">
+          // Key by position only — keying on fn.name would change the key on
+          // every keystroke in the name field and remount the input (focus loss).
+          <div key={i} className="space-y-2">
             <TransitionEditor
               transition={fn}
               sourceKind={kind}
