@@ -34,18 +34,34 @@ claude mcp add --transport http vaani http://localhost:4000/api/mcp \
   --header "Authorization: Bearer $MCP_API_KEY"
 ```
 
+**Codex CLI**
+
+```bash
+codex mcp add vaani --env VAANI_API_KEY=vaa_… -- npx -y vaani-mcp
+```
+
+(Equivalent `~/.codex/config.toml`: `[mcp_servers.vaani]` with
+`command = "npx"`, `args = ["-y", "vaani-mcp"]`, `env = { VAANI_API_KEY = "…" }`.
+Interactive Codex prompts to approve each tool call; headless `codex exec`
+auto-denies MCP calls unless its approval policy is relaxed.)
+
 **Cursor / other clients** — add to the MCP config:
 
 ```json
 {
   "mcpServers": {
     "vaani": {
-      "url": "http://localhost:4000/api/mcp",
-      "headers": { "Authorization": "Bearer <MCP_API_KEY>" }
+      "command": "npx",
+      "args": ["-y", "vaani-mcp"],
+      "env": { "VAANI_API_KEY": "vaa_…" }
     }
   }
 }
 ```
+
+Direct HTTP (no bridge) also works for clients that support it:
+`https://vaani.voxavoice.app/api/mcp` with header
+`Authorization: Bearer <vaa_… key>`.
 
 ## Tools
 

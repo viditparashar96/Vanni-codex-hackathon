@@ -39,6 +39,39 @@ Point `VAANI_MCP_URL` at `http://localhost:4000/api/mcp` for a local Vaani stack
 claude mcp add vaani -e VAANI_API_KEY=vaa_… -- npx -y vaani-mcp
 ```
 
+## Codex CLI
+
+```bash
+codex mcp add vaani --env VAANI_API_KEY=vaa_… -- npx -y vaani-mcp
+```
+
+Or in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.vaani]
+command = "npx"
+args = ["-y", "vaani-mcp"]
+env = { VAANI_API_KEY = "vaa_…" }
+```
+
+Codex asks you to approve each Vaani tool call interactively. For headless
+`codex exec` runs, MCP calls are auto-denied by Codex's approval gate unless
+you explicitly relax its approval policy.
+
+## Cursor
+
+```json
+{
+  "mcpServers": {
+    "vaani": {
+      "command": "npx",
+      "args": ["-y", "vaani-mcp"],
+      "env": { "VAANI_API_KEY": "vaa_…" }
+    }
+  }
+}
+```
+
 ## Tools
 
 `list_agents` · `get_agent` · `create_agent` · `create_flow_agent` · `validate_flow` · `update_agent` · `publish_agent` · `start_test_call` · `list_calls` · `get_call` · `get_analytics_summary` · `get_credit_balance`
