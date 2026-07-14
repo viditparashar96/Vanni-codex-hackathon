@@ -1,8 +1,21 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
+import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
+import { organization as organizationTable, member as memberTable } from "../db/schema/index.js";
 import { initializeOrgCredits } from "./credits.js";
+
+/** Slugify a name into a URL-safe base, suffixed with short randomness for uniqueness. */
+function makeSlug(name: string): string {
+  const base = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const suffix = crypto.randomUUID().slice(0, 8);
+  return `${base || "workspace"}-${suffix}`;
+}
 
 /**
  * Better Auth: email/password + the organization plugin (orgs, members, roles,
@@ -37,6 +50,56 @@ export const auth = betterAuth({
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
       path: "/",
+    },
+  },
+
+  databaseHooks: {
+    user: {
+      create: {
+        // A fresh signup needs an org to operate in. Provision a personal
+        // workspace + owner membership so the very next request has an active org.
+        after: async (user: { id: string; name?: string | null }) => {
+          try {
+            const orgId = crypto.randomUUID();
+            const name = `${user.name || "My"} Workspace`;
+            await db.insert(organizationTable).values({
+              id: orgId,
+              name,
+              slug: makeSlug(user.name || "workspace"),
+            });
+            await db.insert(memberTable).values({
+              id: crypto.randomUUID(),
+              userId: user.id,
+              organizationId: orgId,
+              role: "owner",
+            });
+            await initializeOrgCredits(orgId).catch((err: unknown) =>
+              console.error("[auth] credit init failed for org", orgId, err)
+            );
+          } catch (err: unknown) {
+            console.error("[auth] personal org provisioning failed for user", user.id, err);
+          }
+        },
+      },
+    },
+    session: {
+      create: {
+        // Bind the session to the user's first membership so org-scoped queries
+        // resolve an active organization without a separate selection step.
+        before: async (session: Record<string, unknown> & { userId: string }) => {
+          const [firstMember] = await db
+            .select()
+            .from(memberTable)
+            .where(eq(memberTable.userId, session.userId))
+            .limit(1);
+          return {
+            data: {
+              ...session,
+              activeOrganizationId: firstMember?.organizationId ?? null,
+            },
+          };
+        },
+      },
     },
   },
 

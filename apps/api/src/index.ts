@@ -6,6 +6,8 @@ import { auth } from "./lib/auth.js";
 import { requireAuth } from "./middleware/auth.js";
 import agentsRouter from "./routes/agents.js";
 import callsRouter from "./routes/calls.js";
+import analyticsRouter from "./routes/analytics.js";
+import creditsRouter from "./routes/credits.js";
 import internalRouter from "./routes/internal.js";
 
 const app = express();
@@ -27,6 +29,8 @@ app.get("/health", (_req, res) => {
 // router additionally runs requireOrg to bind + verify the :orgId param.
 app.use("/api/orgs/:orgId/agents", requireAuth, agentsRouter);
 app.use("/api/orgs/:orgId/calls", requireAuth, callsRouter);
+app.use("/api/orgs/:orgId/analytics", requireAuth, analyticsRouter);
+app.use("/api/orgs/:orgId/credits", requireAuth, creditsRouter);
 
 // Cluster-internal engine callbacks (no session auth).
 app.use("/api/internal", internalRouter);
