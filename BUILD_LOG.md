@@ -140,12 +140,24 @@ uv sync
 uv run uvicorn engine.main:app --host 0.0.0.0 --port 7860
 ```
 
-Then open **http://localhost:7860/** in Chrome:
-1. The test console pre-fills a simple "dental receptionist" agent — edit the config if you like.
-2. Click **Connect & Talk**, allow the mic. The agent greets you; talk back.
-3. Watch the terminal: dispatch log → transcript → the end-of-call report at `/dev/report-sink`.
+Then open **http://localhost:7860/** in Chrome — this is Pipecat's **official prebuilt
+WebRTC UI** (known-good mic + audio playback). Click **Connect**, allow the mic. With no
+dispatch linked it runs a built-in default "dental receptionist" agent; talk to it.
+Watch the terminal for the transcript and the end-of-call report (logged at `/dev/report-sink`).
+(A hand-rolled fallback console lives at `/custom`.)
 
-Verified without a mic (server side): `/health`, `/dispatch` (registers call), `/api/offer` (404 on unknown call), `/` (test page), `/dev/report-sink`. Boots clean on pipecat 1.5.0.
+Verified server-side: `/` serves the prebuilt UI + assets (200), `/health`, `/dispatch`,
+`/api/offer` (400 on missing sdp, default-agent path on no call_id), `/dev/report-sink`.
+Boots clean on pipecat 1.5.0.
+
+### Bugs fixed during first live test (2026-07-14)
+- **No agent audio** → the hand-rolled WebRTC client mishandled the media path. Switched
+  the primary test UI to Pipecat's prebuilt small-webrtc client (mounted at `/`).
+- **STT died mid-call** (`websockets` AssertionError / keepalive fail) → `deepgram-sdk 7.x`
+  needs the legacy websockets API; pinned `websockets>=13.1,<14` (was resolving 16.1).
+- **Report delivery failed** → relative callback URL. Client now sends absolute; engine also
+  resolves relative `/…` report URLs against itself.
+- **Data channel timeout** → client now creates the `chat` data channel before the offer.
 
 ## Quickref
 
