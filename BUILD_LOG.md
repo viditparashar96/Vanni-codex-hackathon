@@ -189,3 +189,11 @@ cd apps/api && pnpm dev   # :4000
 ```
 
 **Current position:** Phases 0–1 complete; Phase 1 live-verified with a real browser voice call. Phase 2 (API foundation: auth+orgs+RBAC, Drizzle schema, agents CRUD+versioning, dispatch endpoint) in progress. **Next action:** integrate Phase 2 output, wire to Neon Postgres, then Phase 3 (close the loop: config resolution DB→dispatch, calls persistence, live event stream).
+
+## Deployment (Azure)
+- **VM:** `voice-machine` (Standard_F8s_v2, 8 vCPU/16 GB, Ubuntu 24.04) in `voice-machine-rg`, eastus. Public IP `20.85.245.60`.
+- **URL:** https://vaani.voxavoice.app (Namecheap A record `vaani` → 20.85.245.60; Let's Encrypt cert via Caddy).
+- **Topology:** Caddy reverse-proxy, single origin: `/*`→web:3000, `/api/*`→api:4000, `/engine/*`→engine:7860. Same-origin ⇒ first-party auth cookies.
+- **Processes:** pm2 (`api`, `web`, `engine`), auto-boot on reboot. Redis local. DB = dedicated Neon (cool-shadow).
+- **Redeploy:** `ssh vaani@20.85.245.60 'cd vaani && git pull && pnpm install && pnpm --filter @vaani/shared build && (cd apps/web && pnpm build) && (cd apps/voice-engine && uv sync) && pm2 restart all'`
+- **Known gap:** WebRTC media is UDP direct to the VM; NSG UDP range opened, but aiortc must advertise the public IP as its ICE candidate for live call audio — to verify/tune on a real test call.
