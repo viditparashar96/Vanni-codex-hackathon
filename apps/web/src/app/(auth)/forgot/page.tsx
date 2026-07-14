@@ -44,6 +44,10 @@ export default function ForgotPage() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          // The API has no password-reset endpoint yet, so this stays a
+          // client-only stub: show the "sent" confirmation without making a
+          // network call we can't honor. Wire up a real request here once the
+          // backend exposes /api/auth/forget-password.
           setSent(true);
         }}
         className="space-y-5"

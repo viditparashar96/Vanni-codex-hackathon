@@ -1,6 +1,22 @@
+"use client";
+
+import * as React from "react";
 import Link from "next/link";
-import { ArrowRight, Sparkles, Waypoints, Zap } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { ArrowRight, Loader2, Sparkles, Waypoints, Zap } from "lucide-react";
+import { api } from "@/lib/api-client";
 import { PageHeader } from "@/components/shell/page-header";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const TEMPLATES = [
   { name: "Appointment reminder", desc: "Confirm, reschedule or cancel — with SMS follow-up.", type: "flow" },
@@ -9,52 +25,239 @@ const TEMPLATES = [
   { name: "Survey", desc: "Short NPS or CSAT survey with structured extraction.", type: "simple" },
 ];
 
+const LLMS = ["gpt-4.1-mini", "gpt-4.1", "claude-haiku-4-5", "claude-sonnet-5", "gemini-2.5-flash"];
+const STTS = ["nova-3-general", "nova-3-medical", "universal-2", "whisper-large-v3"];
+const TTSS = ["cartesia", "elevenlabs", "deepgram-aura", "openai-tts"];
+const VOICES = ["Aria", "Rowan", "Isla", "Theo"];
+const LANGUAGES = [
+  { value: "en", label: "English (US)" },
+  { value: "en-IN", label: "English (India)" },
+  { value: "es", label: "Spanish" },
+  { value: "fr", label: "French" },
+  { value: "de", label: "German" },
+  { value: "hi", label: "Hindi" },
+];
+
+function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
+  return (
+    <div className="mb-2 flex items-baseline justify-between">
+      <span className="eyebrow text-[10px] text-ink">{children}</span>
+      {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
+    </div>
+  );
+}
+
+function VoiceSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="h-11 w-full rounded-xl border-[1.5px] border-input">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+const toOptions = (xs: string[]) => xs.map((x) => ({ value: x, label: x }));
+
 export default function NewAgentPage() {
+  const router = useRouter();
+
+  const [name, setName] = React.useState("");
+  const [description, setDescription] = React.useState("");
+  const [systemPrompt, setSystemPrompt] = React.useState(
+    "You are a helpful voice agent. Keep replies short and conversational — one idea per turn, no markdown.",
+  );
+  const [greetingMessage, setGreetingMessage] = React.useState("Hello! How can I help you today?");
+  const [agentSpeaksFirst, setAgentSpeaksFirst] = React.useState(true);
+
+  const [llm, setLlm] = React.useState("gpt-4.1-mini");
+  const [stt, setStt] = React.useState("nova-3-general");
+  const [tts, setTts] = React.useState("cartesia");
+  const [voice, setVoice] = React.useState("Aria");
+  const [language, setLanguage] = React.useState("en");
+
+  const [creating, setCreating] = React.useState(false);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toast.error("Give your agent a name to continue.");
+      return;
+    }
+    setCreating(true);
+    try {
+      const created = await api.createAgent({
+        name: trimmed,
+        description: description.trim() || undefined,
+        type: "simple",
+        systemPrompt: systemPrompt.trim() || undefined,
+        greetingMessage: agentSpeaksFirst ? greetingMessage.trim() || undefined : undefined,
+        agentSpeaksFirst,
+        voice: { llm, stt, tts, voice, language },
+      });
+      toast.success(`Created ${created.name}`, { description: "Opening the builder…" });
+      router.push(`/agents/${created.id}`);
+    } catch (err) {
+      toast.error("Couldn’t create the agent", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+      setCreating(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-[1000px]">
       <PageHeader
         eyebrow="New agent"
         title="What are we building?"
-        description="Pick a shape for the conversation. You can switch a simple agent to a flow later."
+        description="Spin up a simple prompt-driven agent below, or reach for a flow when the conversation needs branching."
       />
 
-      <div className="grid gap-5 md:grid-cols-2">
-        {/* simple */}
-        <Link
-          href="/agents/agt_frontdesk"
-          className="group rise-in rise-in-1 relative overflow-hidden rounded-3xl border-[1.5px] border-ink bg-lime p-7 shadow-[5px_5px_0_var(--ink)] transition-transform hover:-translate-y-1"
-        >
+      {/* simple agent — real create form */}
+      <form
+        onSubmit={onSubmit}
+        className="rise-in rise-in-1 relative overflow-hidden rounded-3xl border-[1.5px] border-ink bg-paper shadow-[5px_5px_0_var(--ink)]"
+      >
+        <div className="flex items-center gap-4 border-b-[1.5px] border-ink bg-lime px-7 py-6">
           <div className="flex size-12 items-center justify-center rounded-2xl border-[1.5px] border-ink bg-paper">
             <Zap className="size-6 text-ink" />
           </div>
-          <h2 className="display mt-6 text-[26px] text-forest">Simple agent</h2>
-          <p className="mt-2 max-w-[36ch] text-[13.5px] leading-relaxed text-forest/80">
-            One system prompt, one goal. Perfect for reception, FAQ, intake, reminders and tier-1 support.
-          </p>
-          <div className="mt-8 flex items-center gap-2 font-display text-[11.5px] font-extrabold tracking-[0.12em] text-forest uppercase">
-            Start from prompt
-            <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+          <div>
+            <h2 className="display text-[24px] text-forest">Simple agent</h2>
+            <p className="mt-0.5 max-w-[52ch] text-[13px] leading-relaxed text-forest/80">
+              One system prompt, one goal. Perfect for reception, FAQ, intake, reminders and tier-1 support.
+            </p>
           </div>
-        </Link>
+        </div>
 
-        {/* flow */}
-        <Link
-          href="/agents/agt_reminder/flow"
-          className="group rise-in rise-in-2 relative overflow-hidden rounded-3xl border-[1.5px] border-ink bg-forest p-7 text-paper shadow-[5px_5px_0_var(--ink)] transition-transform hover:-translate-y-1"
-        >
-          <div className="flex size-12 items-center justify-center rounded-2xl border-[1.5px] border-lime/50 bg-forest-soft">
-            <Waypoints className="size-6 text-lime" />
+        <div className="grid gap-6 p-7 lg:grid-cols-[1fr_320px]">
+          {/* left: identity + prompt */}
+          <div className="space-y-6">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div>
+                <FieldLabel hint="Required">Name</FieldLabel>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Riya — Front Desk"
+                  autoFocus
+                  className="h-11 rounded-xl border-[1.5px] border-input focus-visible:border-ink focus-visible:ring-ink/10"
+                />
+              </div>
+              <div>
+                <FieldLabel hint="Optional">Description</FieldLabel>
+                <Input
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Answers the main line and books visits"
+                  className="h-11 rounded-xl border-[1.5px] border-input focus-visible:border-ink focus-visible:ring-ink/10"
+                />
+              </div>
+            </div>
+
+            <div>
+              <FieldLabel hint="Written for speech — short sentences, no markdown">System prompt</FieldLabel>
+              <Textarea
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                className="min-h-[180px] rounded-xl border-[1.5px] border-input bg-cream/50 text-[14px] leading-relaxed focus-visible:border-ink focus-visible:ring-ink/10"
+              />
+            </div>
+
+            <div className="rounded-2xl border-[1.5px] border-border bg-cream/40 p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[13.5px] font-semibold text-ink">Agent speaks first</div>
+                  <div className="text-[11.5px] text-muted-foreground">Required for outbound calls</div>
+                </div>
+                <Switch checked={agentSpeaksFirst} onCheckedChange={setAgentSpeaksFirst} />
+              </div>
+              {agentSpeaksFirst && (
+                <div className="mt-4">
+                  <FieldLabel hint="Spoken exactly — bypasses the LLM">Greeting message</FieldLabel>
+                  <Textarea
+                    value={greetingMessage}
+                    onChange={(e) => setGreetingMessage(e.target.value)}
+                    className="min-h-[60px] rounded-xl border-[1.5px] border-input text-[14px] focus-visible:border-ink focus-visible:ring-ink/10"
+                  />
+                </div>
+              )}
+            </div>
           </div>
-          <h2 className="display mt-6 text-[26px] text-paper">Flow agent</h2>
-          <p className="mt-2 max-w-[36ch] text-[13.5px] leading-relaxed text-paper/70">
+
+          {/* right: voice stack */}
+          <div className="space-y-4 rounded-2xl border-[1.5px] border-border bg-cream/30 p-5">
+            <h3 className="eyebrow text-[10px] text-ink">Voice stack</h3>
+            <VoiceSelect label="LLM" value={llm} onChange={setLlm} options={toOptions(LLMS)} />
+            <VoiceSelect label="STT" value={stt} onChange={setStt} options={toOptions(STTS)} />
+            <VoiceSelect label="TTS" value={tts} onChange={setTts} options={toOptions(TTSS)} />
+            <VoiceSelect label="Voice" value={voice} onChange={setVoice} options={toOptions(VOICES)} />
+            <VoiceSelect label="Language" value={language} onChange={setLanguage} options={LANGUAGES} />
+            <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+              Sensible defaults to start — tune the full pipeline in the builder after you create.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-4 border-t-[1.5px] border-border px-7 py-5">
+          <span className="text-[12px] text-muted-foreground">You can switch a simple agent to a flow later.</span>
+          <button
+            type="submit"
+            disabled={creating}
+            className="group flex h-11 items-center gap-2.5 rounded-full bg-ink px-6 font-display text-[11.5px] font-extrabold tracking-[0.1em] text-paper uppercase transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {creating ? "Creating" : "Create agent"}
+            <span className="flex size-5.5 items-center justify-center rounded-full bg-lime text-forest">
+              {creating ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <ArrowRight className="size-3 stroke-[3] transition-transform group-hover:translate-x-0.5" />
+              )}
+            </span>
+          </button>
+        </div>
+      </form>
+
+      {/* flow — links out to the canvas */}
+      <Link
+        href="/agents/agt_reminder/flow"
+        className="group rise-in rise-in-2 relative mt-5 flex items-center gap-5 overflow-hidden rounded-3xl border-[1.5px] border-ink bg-forest p-7 text-paper shadow-[5px_5px_0_var(--ink)] transition-transform hover:-translate-y-1"
+      >
+        <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl border-[1.5px] border-lime/50 bg-forest-soft">
+          <Waypoints className="size-6 text-lime" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="display text-[22px] text-paper">Flow agent</h2>
+          <p className="mt-1 max-w-[52ch] text-[13px] leading-relaxed text-paper/70">
             A directed graph of stages — verify, branch, transfer, SMS — each with its own objective and tools.
           </p>
-          <div className="mt-8 flex items-center gap-2 font-display text-[11.5px] font-extrabold tracking-[0.12em] text-lime uppercase">
-            Open the canvas
-            <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-          </div>
-        </Link>
-      </div>
+        </div>
+        <div className="flex items-center gap-2 font-display text-[11.5px] font-extrabold tracking-[0.12em] text-lime uppercase">
+          Open the canvas
+          <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+        </div>
+      </Link>
 
       {/* composer plug */}
       <Link

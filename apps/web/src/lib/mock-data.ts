@@ -26,8 +26,8 @@ function mulberry32(seed: number) {
 }
 
 export const ORG = {
-  id: "org_cedarline",
-  name: "Cedarline Health",
+  id: "org_demo",
+  name: "Acme Inc",
   plan: "Growth",
 };
 
@@ -47,8 +47,8 @@ export const mockAgents: Agent[] = [
     createdAt: "2026-04-02T09:12:00Z",
     updatedAt: "2026-07-12T17:40:00Z",
     systemPrompt:
-      "You are Riya, the friendly front-desk voice for Cedarline Health clinics. Keep sentences short and warm. You can book, reschedule and cancel appointments, give directions and opening hours, and transfer to a human for anything clinical. Never give medical advice.",
-    greetingMessage: "Thanks for calling Cedarline Health, this is Riya. How can I help you today?",
+      "You are Riya, the friendly front-desk voice for Acme Inc clinics. Keep sentences short and warm. You can book, reschedule and cancel appointments, give directions and opening hours, and transfer to a human for anything clinical. Never give medical advice.",
+    greetingMessage: "Thanks for calling Acme Inc, this is Riya. How can I help you today?",
     agentSpeaksFirst: true,
   },
   {
@@ -227,7 +227,7 @@ export const mockCalls: Call[] = buildCalls();
 
 /* Rich transcript + event timeline for the call-detail view. */
 export const detailedTurns = [
-  { role: "agent" as const, text: "Thanks for calling Cedarline Health, this is Riya. How can I help you today?", atSec: 1 },
+  { role: "agent" as const, text: "Thanks for calling Acme Inc, this is Riya. How can I help you today?", atSec: 1 },
   { role: "caller" as const, text: "Hi, yeah — I need to move my appointment on Thursday. Something came up at work.", atSec: 7 },
   { role: "agent" as const, text: "Of course. Can I get your date of birth to pull up the booking?", atSec: 13, latencyMs: 740 },
   { role: "caller" as const, text: "March 9th, 1988.", atSec: 19 },
@@ -374,11 +374,11 @@ export const mockKbs: KnowledgeBase[] = [
 ];
 
 export const mockTools: ToolDef[] = [
-  { id: "tool_lookup", name: "lookup_patient", description: "Find a patient record by phone or DOB.", method: "GET", url: "https://ehr.cedarline.health/api/patients", authType: "bearer", timeoutMs: 4000, usedByAgents: 4, updatedAt: "2026-06-30T10:00:00Z" },
-  { id: "tool_slots", name: "get_open_slots", description: "List open appointment slots for a provider and week.", method: "GET", url: "https://ehr.cedarline.health/api/slots", authType: "bearer", timeoutMs: 5000, usedByAgents: 3, updatedAt: "2026-06-30T10:02:00Z" },
-  { id: "tool_book", name: "book_appointment", description: "Book, reschedule or cancel an appointment.", method: "POST", url: "https://ehr.cedarline.health/api/appointments", authType: "bearer", timeoutMs: 6000, usedByAgents: 3, updatedAt: "2026-07-02T15:30:00Z" },
-  { id: "tool_refill", name: "check_refill_status", description: "Check pharmacy refill eligibility and status.", method: "GET", url: "https://rx.cedarline.health/api/refills", authType: "api_key", timeoutMs: 4000, usedByAgents: 1, updatedAt: "2026-05-06T12:20:00Z" },
-  { id: "tool_ticket", name: "create_ticket", description: "Open a billing or admin ticket in the helpdesk.", method: "POST", url: "https://desk.cedarline.health/api/tickets", authType: "api_key", timeoutMs: 5000, usedByAgents: 2, updatedAt: "2026-06-11T09:00:00Z" },
+  { id: "tool_lookup", name: "lookup_patient", description: "Find a patient record by phone or DOB.", method: "GET", url: "https://ehr.Acme.health/api/patients", authType: "bearer", timeoutMs: 4000, usedByAgents: 4, updatedAt: "2026-06-30T10:00:00Z" },
+  { id: "tool_slots", name: "get_open_slots", description: "List open appointment slots for a provider and week.", method: "GET", url: "https://ehr.Acme.health/api/slots", authType: "bearer", timeoutMs: 5000, usedByAgents: 3, updatedAt: "2026-06-30T10:02:00Z" },
+  { id: "tool_book", name: "book_appointment", description: "Book, reschedule or cancel an appointment.", method: "POST", url: "https://ehr.Acme.health/api/appointments", authType: "bearer", timeoutMs: 6000, usedByAgents: 3, updatedAt: "2026-07-02T15:30:00Z" },
+  { id: "tool_refill", name: "check_refill_status", description: "Check pharmacy refill eligibility and status.", method: "GET", url: "https://rx.Acme.health/api/refills", authType: "api_key", timeoutMs: 4000, usedByAgents: 1, updatedAt: "2026-05-06T12:20:00Z" },
+  { id: "tool_ticket", name: "create_ticket", description: "Open a billing or admin ticket in the helpdesk.", method: "POST", url: "https://desk.Acme.health/api/tickets", authType: "api_key", timeoutMs: 5000, usedByAgents: 2, updatedAt: "2026-06-11T09:00:00Z" },
 ];
 
 export const mockRecordings: Recording[] = [
@@ -396,11 +396,11 @@ export const mockNumbers: PhoneNumber[] = [
 ];
 
 export const mockMembers: Member[] = [
-  { id: "mem_1", name: "Soumya Panda", email: "soumya@cedarline.health", role: "owner", status: "active", joinedAt: "2026-04-01T08:00:00Z" },
-  { id: "mem_2", name: "Grace Obi", email: "grace@cedarline.health", role: "admin", status: "active", joinedAt: "2026-04-03T10:00:00Z" },
-  { id: "mem_3", name: "Marcus Lee", email: "marcus@cedarline.health", role: "agent_builder", status: "active", joinedAt: "2026-04-20T09:30:00Z" },
-  { id: "mem_4", name: "Priya Raman", email: "priya@cedarline.health", role: "agent_builder", status: "active", joinedAt: "2026-05-11T14:00:00Z" },
-  { id: "mem_5", name: "Dana Whitcomb", email: "dana.w@cedarline.health", role: "viewer", status: "invited", joinedAt: "2026-07-10T16:00:00Z" },
+  { id: "mem_1", name: "Soumya Panda", email: "soumya@Acme.health", role: "owner", status: "active", joinedAt: "2026-04-01T08:00:00Z" },
+  { id: "mem_2", name: "Grace Obi", email: "grace@Acme.health", role: "admin", status: "active", joinedAt: "2026-04-03T10:00:00Z" },
+  { id: "mem_3", name: "Marcus Lee", email: "marcus@Acme.health", role: "agent_builder", status: "active", joinedAt: "2026-04-20T09:30:00Z" },
+  { id: "mem_4", name: "Priya Raman", email: "priya@Acme.health", role: "agent_builder", status: "active", joinedAt: "2026-05-11T14:00:00Z" },
+  { id: "mem_5", name: "Dana Whitcomb", email: "dana.w@Acme.health", role: "viewer", status: "invited", joinedAt: "2026-07-10T16:00:00Z" },
 ];
 
 export const mockApiKeys: ApiKey[] = [

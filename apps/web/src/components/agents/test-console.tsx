@@ -16,56 +16,231 @@ import {
   Zap,
 } from "lucide-react";
 import type { Agent } from "@/types";
-import { detailedEvents, detailedTurns } from "@/lib/mock-data";
+import { api } from "@/lib/api-client";
 import { fmtClock } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type CallState = "idle" | "connecting" | "live" | "ended";
+
+/** One line in the live event feed (data-channel signals + local milestones). */
+interface FeedEvent {
+  id: string;
+  atSec: number;
+  kind: "signal" | "system";
+  label: string;
+  detail?: string;
+}
+
+/**
+ * Wait for ICE gathering to finish so the offer carries all candidates
+ * (non-trickle). Resolves early once complete, with a 2s safety fallback for
+ * networks that never reach the "complete" state.
+ */
+function waitForIceGathering(pc: RTCPeerConnection): Promise<void> {
+  return new Promise((resolve) => {
+    if (pc.iceGatheringState === "complete") {
+      resolve();
+      return;
+    }
+    const check = () => {
+      if (pc.iceGatheringState === "complete") {
+        pc.removeEventListener("icegatheringstatechange", check);
+        resolve();
+      }
+    };
+    pc.addEventListener("icegatheringstatechange", check);
+    setTimeout(resolve, 2000);
+  });
+}
 
 export function TestConsole({ agent }: { agent: Agent }) {
   const [state, setState] = React.useState<CallState>("idle");
   const [elapsed, setElapsed] = React.useState(0);
   const [muted, setMuted] = React.useState(false);
   const [mode, setMode] = React.useState<"voice" | "chat">("voice");
+  const [events, setEvents] = React.useState<FeedEvent[]>([]);
+  const [remoteActive, setRemoteActive] = React.useState(false);
+
   const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const feedRef = React.useRef<HTMLDivElement>(null);
+  const audioRef = React.useRef<HTMLAudioElement>(null);
+  const pcRef = React.useRef<RTCPeerConnection | null>(null);
+  const streamRef = React.useRef<MediaStream | null>(null);
+  // Monotonic clock captured when the call goes live, so feed timestamps are
+  // relative to connection rather than to the mock start.
+  const liveAtRef = React.useRef<number>(0);
 
-  const visibleTurns = detailedTurns.filter((t) => state === "live" && t.atSec <= elapsed);
-  const visibleEvents = detailedEvents.filter(
-    (e) => state === "live" && e.atSec <= elapsed && e.type !== "call_ended",
+  const agentSpeaking = state === "live" && remoteActive;
+
+  const pushEvent = React.useCallback(
+    (kind: FeedEvent["kind"], label: string, detail?: string) => {
+      const atSec = liveAtRef.current
+        ? Math.max(0, Math.round((Date.now() - liveAtRef.current) / 1000))
+        : 0;
+      setEvents((prev) => [
+        ...prev,
+        { id: `${label}-${prev.length}-${Date.now()}`, atSec, kind, label, detail },
+      ]);
+    },
+    [],
   );
-  const agentSpeaking =
-    state === "live" &&
-    visibleTurns.length > 0 &&
-    visibleTurns[visibleTurns.length - 1].role === "agent" &&
-    elapsed - visibleTurns[visibleTurns.length - 1].atSec < 5;
 
-  const start = () => {
-    setState("connecting");
-    setElapsed(0);
-    setTimeout(() => {
-      setState("live");
-      timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
-    }, 1400);
-  };
+  /** Tear down the peer connection, stop the mic, and clear the audio sink. */
+  const teardown = React.useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    if (pcRef.current) {
+      pcRef.current.onconnectionstatechange = null;
+      pcRef.current.ontrack = null;
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+    if (audioRef.current) audioRef.current.srcObject = null;
+    setRemoteActive(false);
+  }, []);
 
   const end = React.useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
+    const wasLive = pcRef.current !== null;
+    teardown();
     setState("ended");
-    toast.success("Test call ended", {
-      description: "End-of-call report is ready below — transcript, metrics and QA.",
+    if (wasLive) {
+      toast.success("Test call ended", {
+        description: "The WebRTC session was closed and your mic released.",
+      });
+    }
+  }, [teardown]);
+
+  const start = React.useCallback(async () => {
+    setState("connecting");
+    setElapsed(0);
+    setEvents([]);
+    setMuted(false);
+    liveAtRef.current = 0;
+
+    let pc: RTCPeerConnection | null = null;
+    let stream: MediaStream | null = null;
+
+    try {
+      // 1) Ask the backend to provision a test session on the voice engine.
+      const { callId, engineOfferUrl } = await api.createTestSession(agent.id);
+
+      // 2) Grab the microphone.
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      // 3) Build the peer connection.
+      pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      });
+      pcRef.current = pc;
+
+      // Data channel carries engine signals (transcripts/events land here in a
+      // later phase); for now we surface the raw event types in the feed.
+      const dc = pc.createDataChannel("chat", { ordered: true });
+      dc.onopen = () => pushEvent("system", "data channel", "open");
+      dc.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data as string) as { type?: string };
+          if (msg?.type) pushEvent("signal", msg.type);
+        } catch {
+          /* non-JSON frames are ignored for now */
+        }
+      };
+
+      // ONE sendrecv audio m-line: the mic track both sends our audio and
+      // receives the agent's. Do NOT add a second recvonly transceiver — a
+      // second m-line breaks negotiation with the engine.
+      stream.getTracks().forEach((t) => pc!.addTrack(t, stream!));
+
+      pc.ontrack = (e) => {
+        const [remoteStream] = e.streams;
+        if (audioRef.current && remoteStream) {
+          audioRef.current.srcObject = remoteStream;
+          audioRef.current.play().catch(() => {
+            toast.info("Tap the page to enable audio", {
+              description: "Your browser blocked autoplay for the agent's voice.",
+            });
+          });
+        }
+        setRemoteActive(true);
+        pushEvent("signal", "remote audio", "agent stream attached");
+      };
+
+      pc.onconnectionstatechange = () => {
+        const cs = pc!.connectionState;
+        if (cs === "connected") {
+          setState("live");
+          liveAtRef.current = Date.now();
+          if (!timerRef.current) {
+            timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+          }
+          pushEvent("system", "connected", "WebRTC peer established");
+        } else if (cs === "failed" || cs === "disconnected") {
+          toast.error("Call disconnected", {
+            description: "The connection to the voice engine dropped.",
+          });
+          end();
+        }
+      };
+
+      // 4) Offer, then wait for ICE gathering (non-trickle) with a 2s fallback.
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await waitForIceGathering(pc);
+
+      // 5) Exchange SDP directly with the engine's offer endpoint.
+      const res = await fetch(engineOfferUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sdp: pc.localDescription?.sdp,
+          type: pc.localDescription?.type,
+          call_id: callId,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`Engine handshake failed (${res.status}) ${text}`.trim());
+      }
+      const answer = (await res.json()) as RTCSessionDescriptionInit;
+      await pc.setRemoteDescription(answer);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Could not start the test call";
+      // getUserMedia rejection is the most common failure — give a clear hint.
+      const isMic =
+        err instanceof DOMException &&
+        (err.name === "NotAllowedError" || err.name === "NotFoundError");
+      toast.error("Test call failed", {
+        description: isMic ? "Microphone access was denied or unavailable." : message,
+      });
+      teardown();
+      setState("idle");
+    }
+  }, [agent.id, pushEvent, teardown, end]);
+
+  const toggleMute = React.useCallback(() => {
+    const stream = streamRef.current;
+    if (!stream) return;
+    setMuted((prev) => {
+      const next = !prev;
+      stream.getAudioTracks().forEach((t) => (t.enabled = !next));
+      return next;
     });
   }, []);
 
   React.useEffect(() => {
-    if (state === "live" && elapsed >= 61) end();
-  }, [elapsed, state, end]);
-
-  React.useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: "smooth" });
-  }, [visibleTurns.length]);
+  }, [events.length]);
 
-  React.useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
+  // Release media + peer connection if the console unmounts mid-call.
+  React.useEffect(() => teardown, [teardown]);
 
   return (
     <div className="mx-auto max-w-[1200px]">
@@ -160,9 +335,9 @@ export function TestConsole({ agent }: { agent: Agent }) {
           <div className="w-full text-center">
             <div className="font-display text-[16px] font-bold">
               {state === "idle" && "Start a test call — no phone needed"}
-              {state === "connecting" && "Joining LiveKit room…"}
-              {state === "live" && (agentSpeaking ? `${agent.voice.voice} is speaking…` : "Listening…")}
-              {state === "ended" && "Report delivered ↓"}
+              {state === "connecting" && "Connecting to the voice engine…"}
+              {state === "live" && "Connected — speak now"}
+              {state === "ended" && "Call ended"}
             </div>
             <div className="mt-1.5 text-[12px] text-paper/55">
               {agent.voice.llm} · {agent.voice.stt.split("/")[0]} · {agent.voice.tts.split("/")[0]}
@@ -173,7 +348,7 @@ export function TestConsole({ agent }: { agent: Agent }) {
                 <>
                   <button
                     type="button"
-                    onClick={() => setMuted((m) => !m)}
+                    onClick={toggleMute}
                     className={cn(
                       "flex size-12 items-center justify-center rounded-full border-[1.5px] transition-colors",
                       muted ? "border-brand-orange bg-brand-orange/20 text-brand-orange" : "border-paper/30 text-paper hover:border-paper",
@@ -210,41 +385,33 @@ export function TestConsole({ agent }: { agent: Agent }) {
         <div className="rise-in rise-in-1 flex min-h-[520px] flex-col gap-4">
           <div ref={feedRef} className="flex-1 space-y-3 overflow-y-auto rounded-3xl border-[1.5px] border-border bg-paper p-6">
             <div className="eyebrow mb-2 text-[9.5px] text-muted-foreground">Live transcript</div>
-            {visibleTurns.length === 0 && (
-              <p className="pt-10 text-center text-[13px] text-muted-foreground">
-                {state === "live" ? "Waiting for the first turn…" : "The conversation will appear here, turn by turn, with per-turn latency."}
-              </p>
-            )}
-            {visibleTurns.map((t, i) => (
-              <div key={i} className={cn("flex", t.role === "agent" ? "justify-start" : "justify-end")}>
-                <div
-                  className={cn(
-                    "max-w-[78%] rounded-2xl px-4 py-2.5 text-[13.5px] leading-relaxed",
-                    t.role === "agent" ? "rounded-tl-md bg-cream text-ink" : "rounded-tr-md bg-forest text-paper",
-                  )}
-                >
-                  {t.text}
-                  {t.latencyMs && (
-                    <span className="mt-1 block text-right font-mono text-[9.5px] opacity-50">{t.latencyMs} ms</span>
-                  )}
-                </div>
-              </div>
-            ))}
+            <div className="pt-10 text-center text-[13px] text-muted-foreground">
+              {state === "idle" &&
+                "Start a call and the live transcript will appear here in a later phase."}
+              {state === "connecting" && "Negotiating WebRTC with the voice engine…"}
+              {state === "live" && (
+                <span className="text-ink">
+                  Connected — start speaking. The agent can hear you.
+                </span>
+              )}
+              {state === "ended" && "Call ended. Start again to run another test."}
+            </div>
           </div>
 
           <div className="max-h-[180px] overflow-y-auto rounded-3xl border-[1.5px] border-border bg-paper p-5">
             <div className="eyebrow mb-3 text-[9.5px] text-muted-foreground">Event feed</div>
-            {visibleEvents.length === 0 ? (
-              <p className="text-[12px] text-muted-foreground">Tool calls, latency ticks and node transitions stream here.</p>
+            {events.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground">
+                Connection milestones and engine signals stream here during a call.
+              </p>
             ) : (
               <ul className="space-y-1.5">
-                {[...visibleEvents].reverse().map((e) => (
+                {[...events].reverse().map((e) => (
                   <li key={e.id} className="flex items-center gap-2.5 font-mono text-[11.5px] text-ink">
                     <span className="text-muted-foreground">{fmtClock(e.atSec)}</span>
-                    {e.type === "tool_call" ? <Wrench className="size-3 text-forest" /> : <Zap className="size-3 text-brand-orange" />}
+                    {e.kind === "signal" ? <Wrench className="size-3 text-forest" /> : <Zap className="size-3 text-brand-orange" />}
                     <span className="font-semibold">{e.label}</span>
-                    <span className="truncate text-muted-foreground">{e.detail}</span>
-                    {e.latencyMs && <span className="ml-auto shrink-0 text-muted-foreground">{e.latencyMs} ms</span>}
+                    {e.detail && <span className="truncate text-muted-foreground">{e.detail}</span>}
                   </li>
                 ))}
               </ul>
@@ -253,32 +420,8 @@ export function TestConsole({ agent }: { agent: Agent }) {
         </div>
       </div>
 
-      {/* end-of-call report */}
-      {state === "ended" && (
-        <section className="rise-in mt-8 rounded-3xl border-[1.5px] border-ink bg-paper p-7 shadow-[5px_5px_0_var(--ink)]">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="display text-[19px] text-ink">End-of-call report</h2>
-            <span className="sticker text-[9px]">QA 9.2 / 10</span>
-          </div>
-          <p className="mt-3 max-w-[70ch] text-[13.5px] leading-relaxed text-muted-foreground">
-            Rescheduled annual physical from Jul 16 to Jul 24, 9:00 AM with Dr. Iyer. SMS confirmation sent.
-            Caller sentiment positive; no failure tags.
-          </p>
-          <div className="mt-6 grid grid-cols-2 gap-y-5 border-t border-border pt-5 sm:grid-cols-4">
-            {[
-              ["0.86s", "voice-to-voice p50"],
-              ["1 / 11", "interruptions / turns"],
-              ["4", "tool calls · all 2xx"],
-              ["$0.041", "call cost"],
-            ].map(([v, l]) => (
-              <div key={l}>
-                <div className="figure text-[22px] text-ink">{v}</div>
-                <div className="mt-1 text-[11px] text-muted-foreground">{l}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      {/* Remote agent audio sink — hidden, autoplays the engine's voice. */}
+      <audio ref={audioRef} autoPlay playsInline className="hidden" />
     </div>
   );
 }

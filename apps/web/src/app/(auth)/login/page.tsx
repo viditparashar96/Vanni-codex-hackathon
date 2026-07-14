@@ -6,16 +6,37 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { signIn, ensureActiveOrg } from "@/lib/auth-client";
 
 export default function LoginPage() {
   const router = useRouter();
   const [showPw, setShowPw] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const submit = (e: React.SubmitEvent<HTMLFormElement>) => {
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError(null);
     setSubmitting(true);
-    setTimeout(() => router.push("/"), 1400);
+
+    const form = new FormData(e.currentTarget);
+    await signIn.email(
+      {
+        email: String(form.get("email") ?? ""),
+        password: String(form.get("password") ?? ""),
+      },
+      {
+        onError: (ctx) => {
+          setError(ctx.error.message || "Invalid email or password.");
+          setSubmitting(false);
+        },
+        onSuccess: async () => {
+          await ensureActiveOrg();
+          router.push("/");
+          router.refresh();
+        },
+      },
+    );
   };
 
   if (submitting) {
@@ -49,10 +70,19 @@ export default function LoginPage() {
       </p>
 
       <form onSubmit={submit} className="space-y-5">
+        {error && (
+          <div
+            role="alert"
+            className="rounded-[14px] border-[1.5px] border-destructive/40 bg-destructive/10 px-4 py-3 text-[13px] font-medium text-destructive"
+          >
+            {error}
+          </div>
+        )}
         <div>
           <label htmlFor="email" className="eyebrow mb-2 block text-[11px] text-ink">Email</label>
           <Input
             id="email"
+            name="email"
             type="email"
             required
             placeholder="you@clinic.health"
@@ -69,6 +99,7 @@ export default function LoginPage() {
           <div className="relative">
             <Input
               id="password"
+              name="password"
               type={showPw ? "text" : "password"}
               required
               placeholder="Your password"

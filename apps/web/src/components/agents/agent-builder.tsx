@@ -9,6 +9,7 @@ import {
   Braces,
   CircleCheck,
   History,
+  Loader2,
   Mic,
   PhoneOutgoing,
   Play,
@@ -16,6 +17,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type { Agent, KnowledgeBase, ToolDef } from "@/types";
+import { api } from "@/lib/api-client";
 import { fmtAgo } from "@/lib/format";
 import { StatusChip } from "@/components/shared/status-chip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -42,6 +44,61 @@ const VOICES = [
   { name: "Kabir", vibe: "Deep · assured", provider: "ElevenLabs" },
 ];
 const TRAITS = ["Warm", "Patient", "Direct", "Playful", "Formal", "Reassuring"];
+
+/**
+ * Mint a new draft version for an agent and return its id.
+ *
+ * Publishing requires a `versionId`, so we snapshot the current editor config
+ * into a fresh version first. The typed client (`api.ts`) exposes `publishAgent`
+ * but no version-mint helper, so this issues the one missing org-scoped call
+ * directly — same contract as the client's other mutations: same-origin base,
+ * cookie credentials, and the `Origin` header the backend requires.
+ */
+async function createAgentVersion(
+  agentId: string,
+  body: Record<string, unknown>,
+): Promise<string> {
+  const base = process.env.NEXT_PUBLIC_API_URL ?? "";
+
+  const orgRes = await fetch(`${base}/api/auth/organization/list`, {
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!orgRes.ok) {
+    throw new Error(`Failed to resolve active organization (${orgRes.status})`);
+  }
+  const orgs = (await orgRes.json().catch(() => null)) as Array<{ id: string }> | null;
+  const orgId = Array.isArray(orgs) ? orgs[0]?.id : undefined;
+  if (!orgId) throw new Error("No organization found for this session");
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (typeof window !== "undefined") headers.Origin = window.location.origin;
+
+  const res = await fetch(`${base}/api/orgs/${orgId}/agents/${agentId}/versions`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    let message = `Failed to create version (${res.status})`;
+    try {
+      const json = JSON.parse(text) as { error?: string; message?: string };
+      message = json.error ?? json.message ?? message;
+    } catch {
+      if (text) message = text;
+    }
+    throw new Error(message);
+  }
+
+  const json = (await res.json().catch(() => null)) as { version?: unknown } | null;
+  const version = json?.version as { id?: string; versionId?: string } | string | undefined;
+  const versionId =
+    typeof version === "string" ? version : version?.id ?? version?.versionId;
+  if (!versionId) throw new Error("Version created but no id was returned");
+  return versionId;
+}
 
 function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
@@ -75,14 +132,37 @@ export function AgentBuilder({
   const [vad, setVad] = React.useState([0.3]);
   const [speed, setSpeed] = React.useState([1.0]);
   const [dirty, setDirty] = React.useState(false);
+  const [publishing, setPublishing] = React.useState(false);
 
   const markDirty = () => setDirty(true);
 
-  const publish = () => {
-    setDirty(false);
-    toast.success(`Published v${agent.version + 1}`, {
-      description: "Now serving calls on all assigned numbers.",
-    });
+  const publish = async () => {
+    if (publishing) return;
+    setPublishing(true);
+    try {
+      const versionId = await createAgentVersion(agent.id, {
+        personaConfig: {
+          systemPrompt: agent.systemPrompt,
+          greetingMessage: agent.greetingMessage,
+          agentSpeaksFirst: speaksFirst,
+          traits,
+          speakingSpeed: speed[0],
+        },
+        voiceConfig: agent.voice,
+        behaviorConfig: { vadStopSec: vad[0] },
+      });
+      const published = await api.publishAgent(agent.id, versionId);
+      setDirty(false);
+      toast.success(`Published v${published.version}`, {
+        description: "Now serving calls on all assigned numbers.",
+      });
+    } catch (err) {
+      toast.error("Couldn’t publish", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    } finally {
+      setPublishing(false);
+    }
   };
 
   return (
@@ -124,11 +204,18 @@ export function AgentBuilder({
           <button
             type="button"
             onClick={publish}
-            className="group flex h-11 items-center gap-2.5 rounded-full bg-ink px-6 font-display text-[11.5px] font-extrabold tracking-[0.1em] text-paper uppercase transition-transform hover:-translate-y-0.5"
+            disabled={publishing}
+            className="group flex h-11 items-center gap-2.5 rounded-full bg-ink px-6 font-display text-[11.5px] font-extrabold tracking-[0.1em] text-paper uppercase transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {dirty ? "Publish changes" : "Published"}
+            {publishing ? "Publishing" : dirty ? "Publish changes" : "Published"}
             <span className="flex size-5.5 items-center justify-center rounded-full bg-lime text-forest">
-              {dirty ? <ArrowRight className="size-3 stroke-[3]" /> : <CircleCheck className="size-3.5" />}
+              {publishing ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : dirty ? (
+                <ArrowRight className="size-3 stroke-[3]" />
+              ) : (
+                <CircleCheck className="size-3.5" />
+              )}
             </span>
           </button>
         </div>
@@ -159,7 +246,7 @@ export function AgentBuilder({
             <Panel title="The brain">
               <FieldLabel hint="Written for speech — short sentences, no markdown">System prompt</FieldLabel>
               <Textarea
-                defaultValue={agent.systemPrompt ?? "You are a helpful voice agent for Cedarline Health…"}
+                defaultValue={agent.systemPrompt ?? "You are a helpful voice agent for your business…"}
                 onChange={markDirty}
                 className="min-h-[220px] rounded-xl border-[1.5px] border-input bg-cream/50 text-[14px] leading-relaxed focus-visible:border-ink focus-visible:ring-ink/10"
               />

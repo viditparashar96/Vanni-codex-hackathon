@@ -6,15 +6,38 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { signUp, ensureActiveOrg } from "@/lib/auth-client";
 
 export default function RegisterPage() {
   const router = useRouter();
   const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const submit = (e: React.SubmitEvent<HTMLFormElement>) => {
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError(null);
     setSubmitting(true);
-    setTimeout(() => router.push("/"), 1600);
+
+    const form = new FormData(e.currentTarget);
+    await signUp.email(
+      {
+        name: String(form.get("name") ?? ""),
+        email: String(form.get("email") ?? ""),
+        password: String(form.get("password") ?? ""),
+      },
+      {
+        onError: (ctx) => {
+          setError(ctx.error.message || "Could not create your account.");
+          setSubmitting(false);
+        },
+        onSuccess: async () => {
+          // Signup auto-creates a personal org server-side; make it active.
+          await ensureActiveOrg();
+          router.push("/");
+          router.refresh();
+        },
+      },
+    );
   };
 
   if (submitting) {
@@ -53,23 +76,31 @@ export default function RegisterPage() {
       </p>
 
       <form onSubmit={submit} className="space-y-5">
+        {error && (
+          <div
+            role="alert"
+            className="rounded-[14px] border-[1.5px] border-destructive/40 bg-destructive/10 px-4 py-3 text-[13px] font-medium text-destructive"
+          >
+            {error}
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3.5">
           <div>
             <label htmlFor="name" className="eyebrow mb-2 block text-[11px] text-ink">Your name</label>
-            <Input id="name" required placeholder="Ada Okafor" className="h-[52px] rounded-[14px] border-[1.5px] border-input px-4.5 text-[15px] focus-visible:border-ink focus-visible:ring-4 focus-visible:ring-ink/5" />
+            <Input id="name" name="name" required placeholder="Ada Okafor" className="h-[52px] rounded-[14px] border-[1.5px] border-input px-4.5 text-[15px] focus-visible:border-ink focus-visible:ring-4 focus-visible:ring-ink/5" />
           </div>
           <div>
             <label htmlFor="org" className="eyebrow mb-2 block text-[11px] text-ink">Organization</label>
-            <Input id="org" required placeholder="Cedarline Health" className="h-[52px] rounded-[14px] border-[1.5px] border-input px-4.5 text-[15px] focus-visible:border-ink focus-visible:ring-4 focus-visible:ring-ink/5" />
+            <Input id="org" name="org" placeholder="Acme Inc" className="h-[52px] rounded-[14px] border-[1.5px] border-input px-4.5 text-[15px] focus-visible:border-ink focus-visible:ring-4 focus-visible:ring-ink/5" />
           </div>
         </div>
         <div>
           <label htmlFor="email" className="eyebrow mb-2 block text-[11px] text-ink">Work email</label>
-          <Input id="email" type="email" required placeholder="you@clinic.health" className="h-[52px] rounded-[14px] border-[1.5px] border-input px-4.5 text-[15px] focus-visible:border-ink focus-visible:ring-4 focus-visible:ring-ink/5" />
+          <Input id="email" name="email" type="email" required placeholder="you@clinic.health" className="h-[52px] rounded-[14px] border-[1.5px] border-input px-4.5 text-[15px] focus-visible:border-ink focus-visible:ring-4 focus-visible:ring-ink/5" />
         </div>
         <div>
           <label htmlFor="password" className="eyebrow mb-2 block text-[11px] text-ink">Password</label>
-          <Input id="password" type="password" required placeholder="12+ characters" className="h-[52px] rounded-[14px] border-[1.5px] border-input px-4.5 text-[15px] focus-visible:border-ink focus-visible:ring-4 focus-visible:ring-ink/5" />
+          <Input id="password" name="password" type="password" required placeholder="12+ characters" className="h-[52px] rounded-[14px] border-[1.5px] border-input px-4.5 text-[15px] focus-visible:border-ink focus-visible:ring-4 focus-visible:ring-ink/5" />
         </div>
 
         <label className="flex items-start gap-3 text-[13px] leading-relaxed text-muted-foreground">

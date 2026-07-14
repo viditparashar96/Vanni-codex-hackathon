@@ -12,7 +12,6 @@ import {
   mockRecordings,
   mockTools,
   buildCampaignContacts,
-  ORG,
 } from "@/lib/mock-data";
 import type {
   Agent,
@@ -33,44 +32,71 @@ import type {
 /**
  * Typed client for the Vaani platform API (PRD §9).
  *
- * When NEXT_PUBLIC_API_URL is set, requests hit the real backend
- * (`/api/orgs/:orgId/…`, cookie auth). When it's unset or the request
- * fails, each call resolves to realistic mock data so every screen
- * works standalone. Integration is a env-var flip, not a rewrite.
+ * Reads are issued from Server Components and go through `server-api`, which
+ * forwards the request's auth cookie and resolves the caller's active org id
+ * (no more hardcoded org). Mutations run in the browser, which already holds
+ * the session cookie, and send the `Origin` header the backend requires for
+ * state-changing calls.
+ *
+ * When `NEXT_PUBLIC_API_URL` is unset the read layer resolves to realistic
+ * mock data so the dashboard works standalone; that is the ONLY case in which
+ * mocks are used. Once the env var is set, real backend responses (and their
+ * errors) flow through untouched.
  */
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+/* --------------------------------------------------------------------------
+ * Reads — Server Components, cookie forwarded via server-api
+ * ------------------------------------------------------------------------ */
+
+/** Read a list/object endpoint; falls back to mock only when unconfigured. */
 async function get<T>(path: string, fallback: T): Promise<T> {
   if (!API_URL) return fallback;
+  const { orgGet } = await import("./server-api");
+  return orgGet<T>(path);
+}
+
+/**
+ * Read a single resource that may not exist. A 404 resolves to `undefined`
+ * (so callers can `notFound()`); any other error propagates. Falls back to the
+ * provided mock only when the backend is unconfigured.
+ */
+async function getOptional<T>(
+  path: string,
+  fallback: T | undefined,
+): Promise<T | undefined> {
+  if (!API_URL) return fallback;
+  const { orgGet, OrgApiError } = await import("./server-api");
   try {
-    const res = await fetch(`${API_URL}/api/orgs/${ORG.id}${path}`, {
-      credentials: "include",
-      cache: "no-store",
-      signal: AbortSignal.timeout(2500),
-    });
-    if (!res.ok) throw new Error(`${res.status}`);
-    return (await res.json()) as T;
-  } catch {
-    return fallback;
+    return await orgGet<T>(path);
+  } catch (err) {
+    if (err instanceof OrgApiError && err.status === 404) return undefined;
+    throw err;
   }
 }
 
+/* --------------------------------------------------------------------------
+ * Reads only. Client-side mutations live in `api-client.ts` (kept separate so
+ * this server-only module never reaches the client bundle).
+ * ------------------------------------------------------------------------ */
+
 export const api = {
+  // Reads (Server Components)
   getAgents: () => get<Agent[]>("/agents", mockAgents),
-  getAgent: async (id: string) =>
-    get<Agent | undefined>(
+  getAgent: (id: string) =>
+    getOptional<Agent>(
       `/agents/${id}`,
       mockAgents.find((a) => a.id === id),
     ),
   getCalls: () => get<Call[]>("/calls", mockCalls),
-  getCall: async (id: string) =>
-    get<Call | undefined>(
+  getCall: (id: string) =>
+    getOptional<Call>(
       `/calls/${id}`,
       mockCalls.find((c) => c.id === id),
     ),
   getCampaigns: () => get<Campaign[]>("/campaigns", mockCampaigns),
-  getCampaign: async (id: string) =>
-    get<Campaign | undefined>(
+  getCampaign: (id: string) =>
+    getOptional<Campaign>(
       `/campaigns/${id}`,
       mockCampaigns.find((c) => c.id === id),
     ),
