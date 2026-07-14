@@ -9,6 +9,7 @@ import {
   ChartNoAxesColumn,
   ChevronLeft,
   House,
+  Menu,
   Megaphone,
   PhoneCall,
   Settings,
@@ -26,6 +27,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { useMediaQuery } from "@/hooks/use-media-query";
 
 type NavItem = {
   href: string;
@@ -71,6 +74,7 @@ const NAV: { group: string | null; items: NavItem[] }[] = [
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = React.useState(false);
+  const isPhone = useMediaQuery("(max-width: 767px)");
 
   React.useEffect(() => {
     setCollapsed(window.localStorage.getItem("vaani.sidebar") === "rail");
@@ -87,6 +91,10 @@ export function Sidebar() {
     href === "/"
       ? pathname === "/"
       : pathname === href || pathname.startsWith(href.split("/").slice(0, 2).join("/") + "/");
+
+  if (isPhone) {
+    return <MobileSidebar pathname={pathname} isActive={isActive} />;
+  }
 
   return (
     <TooltipProvider delayDuration={80}>
@@ -219,5 +227,77 @@ export function Sidebar() {
         </button>
       </aside>
     </TooltipProvider>
+  );
+}
+
+function MobileSidebar({
+  pathname,
+  isActive,
+}: {
+  pathname: string;
+  isActive: (href: string) => boolean;
+}) {
+  const [open, setOpen] = React.useState(false);
+
+  React.useEffect(() => setOpen(false), [pathname]);
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <button
+          type="button"
+          className="fixed top-6 left-5 z-30 flex size-11 items-center justify-center rounded-full border-[1.5px] border-ink bg-lime text-forest shadow-[2px_2px_0_var(--ink)]"
+          aria-label="Open navigation"
+        >
+          <Menu className="size-5 stroke-[2.5]" />
+        </button>
+      </SheetTrigger>
+      <SheetContent side="left" className="w-[min(88vw,320px)] gap-0 border-r-[1.5px] border-ink bg-sidebar p-0 text-sidebar-foreground sm:max-w-none">
+        <SheetTitle className="sr-only">Navigation</SheetTitle>
+        <div className="flex items-center gap-2.5 px-6 pt-6 pb-4">
+          <span className="pulse-dot shrink-0" />
+          <span className="display text-[20px] font-black tracking-tight text-paper">Vaani</span>
+        </div>
+        <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-6">
+          {NAV.map(({ group, items }) => (
+            <div key={group ?? "root"}>
+              {group && <div className="eyebrow px-3 pb-2 text-[10px] text-sidebar-foreground/45">{group}</div>}
+              <ul className="space-y-0.5">
+                {items.map((item) => {
+                  const active = isActive(item.href);
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.soon ? "/automation" : item.href}
+                        className={cn(
+                          "flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-medium transition-colors",
+                          active
+                            ? "bg-sidebar-primary font-semibold text-sidebar-primary-foreground"
+                            : "text-sidebar-foreground/80 active:bg-sidebar-accent",
+                        )}
+                      >
+                        <item.icon className={cn("size-[18px] shrink-0", active && "stroke-[2.4]")} />
+                        <span>{item.label}</span>
+                        {item.badge && <span className="ml-auto text-[10px] font-bold text-brand-orange">{item.badge}</span>}
+                        {item.soon && <span className="ml-auto text-[10px] text-sidebar-foreground/50">Soon</span>}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
+        <div className="border-t border-sidebar-border p-4">
+          <Link href="/settings/general" className="flex min-h-11 items-center gap-2.5">
+            <div className="flex size-8 items-center justify-center rounded-full bg-sidebar-primary font-display text-[12px] font-black text-sidebar-primary-foreground">C</div>
+            <div>
+              <div className="text-[12.5px] font-semibold text-paper">{ORG.name}</div>
+              <div className="text-[10.5px] text-sidebar-foreground/50">{ORG.plan} plan</div>
+            </div>
+          </Link>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
