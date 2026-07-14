@@ -35,5 +35,21 @@ def create_stt_service(voice: VoiceConfig, keys: dict[str, str | None] | None = 
             raise RuntimeError("OPENAI_API_KEY missing for STT.")
         return OpenAISTTService(api_key=api_key, model=voice.stt_model or "whisper-1")
 
-    logger.warning(f"[stt] provider '{provider}' not wired yet (Phase 4); falling back to deepgram")
+    if provider == "assemblyai":
+        from pipecat.services.assemblyai.stt import AssemblyAISTTService
+
+        api_key = keys.get("assemblyai") or settings.assemblyai_api_key
+        if not api_key:
+            raise RuntimeError("ASSEMBLYAI_API_KEY missing.")
+        return AssemblyAISTTService(api_key=api_key)
+
+    if provider == "azure":
+        from pipecat.services.azure.stt import AzureSTTService
+
+        api_key = keys.get("azure") or settings.azure_speech_key
+        if not api_key or not settings.azure_speech_region:
+            raise RuntimeError("AZURE_SPEECH_KEY / AZURE_SPEECH_REGION missing.")
+        return AzureSTTService(api_key=api_key, region=settings.azure_speech_region)
+
+    logger.warning(f"[stt] provider '{provider}' not recognized; falling back to deepgram")
     return create_stt_service(voice.model_copy(update={"stt_provider": "deepgram"}), keys)

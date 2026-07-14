@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     google_api_key: str | None = None
     groq_api_key: str | None = None
+    assemblyai_api_key: str | None = None
+    azure_speech_key: str | None = None
+    azure_speech_region: str | None = None
 
     # Knowledge base retrieval (Phase 4).
     qdrant_url: str = "http://localhost:6333"

@@ -52,6 +52,18 @@ def create_tts_service(voice: VoiceConfig, keys: dict[str, str | None] | None = 
             model=_cartesia_model(voice.tts_model),
         )
 
+    if provider == "elevenlabs":
+        from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
+
+        api_key = keys.get("elevenlabs") or settings.elevenlabs_api_key
+        if not api_key:
+            raise RuntimeError("ELEVENLABS_API_KEY missing.")
+        return ElevenLabsTTSService(
+            api_key=api_key,
+            voice_id=voice.tts_voice or "EXAVITQu4vr4xnSDxMaL",
+            model=voice.tts_model or "eleven_turbo_v2_5",
+        )
+
     if provider == "openai":
         from pipecat.services.openai.tts import OpenAITTSService
 
@@ -60,5 +72,5 @@ def create_tts_service(voice: VoiceConfig, keys: dict[str, str | None] | None = 
             raise RuntimeError("OPENAI_API_KEY missing for TTS.")
         return OpenAITTSService(api_key=api_key, voice=voice.tts_voice or "alloy")
 
-    logger.warning(f"[tts] provider '{provider}' not wired yet (Phase 4); falling back to cartesia")
+    logger.warning(f"[tts] provider '{provider}' not recognized; falling back to cartesia")
     return create_tts_service(voice.model_copy(update={"tts_provider": "cartesia"}), keys)
