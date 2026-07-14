@@ -6,6 +6,7 @@
  * the load-bearing api <-> voice-engine boundary; change them deliberately.
  */
 export * from "./agent-config.js";
+export * from "./flow.js";
 export * from "./dispatch.js";
 export * from "./report.js";
 export * from "./events.js";

@@ -7,6 +7,8 @@ import {
   AdvancedConfigSchema,
   HttpToolSchema,
   KnowledgeBaseBindingSchema,
+  FlowConfigSchema,
+  validateFlowConfig,
   type PersonaConfig,
   type VoiceConfig,
 } from "@vaani/shared";
@@ -177,6 +179,25 @@ function voiceFromFlat(
   return Object.keys(out).length ? out : undefined;
 }
 
+// Validate a raw flow-config body for a flow-type agent.
+//
+// Runs the Zod shape check (structure, enums, required fields) followed by the
+// structural graph validation (single initial node, reachable targets, no dead
+// ends, telephony branches). Returns a flat list of human-readable error
+// strings — empty means the config is valid.
+function validateFlowConfigBody(raw: unknown): string[] {
+  const parsed = FlowConfigSchema.safeParse(raw);
+  if (!parsed.success) {
+    return parsed.error.issues.map((issue) => {
+      const path = issue.path.join(".");
+      return path ? `${path}: ${issue.message}` : issue.message;
+    });
+  }
+  return validateFlowConfig(parsed.data).map((err) =>
+    err.nodeId ? `[${err.nodeId}] ${err.message}` : err.message
+  );
+}
+
 // ── List ────────────────────────────────────────────────────────────────────
 router.get("/", async (req: Request, res: Response) => {
   const orgId = orgOf(req);
@@ -217,6 +238,16 @@ router.post("/", async (req: Request, res: Response) => {
     version?.personaConfig ??
     personaFromFlat({ systemPrompt, greetingMessage, agentSpeaksFirst });
   const voiceConfig = version?.voiceConfig ?? voiceFromFlat(voice);
+
+  // Flow agents: validate the supplied graph before persisting version 1.
+  // Simple agents are unaffected.
+  if (type === "flow" && version?.flowConfig !== undefined) {
+    const errors = validateFlowConfigBody(version.flowConfig);
+    if (errors.length) {
+      res.status(400).json({ error: "Invalid flow config", errors });
+      return;
+    }
+  }
 
   const result = await db.transaction(async (tx) => {
     const [agent] = await tx
@@ -350,6 +381,15 @@ router.post("/:agentId/versions", async (req: Request, res: Response) => {
     return;
   }
 
+  // Flow agents: validate any incoming graph before it becomes a new version.
+  if (agent.type === "flow" && parsed.data.flowConfig !== undefined) {
+    const errors = validateFlowConfigBody(parsed.data.flowConfig);
+    if (errors.length) {
+      res.status(400).json({ error: "Invalid flow config", errors });
+      return;
+    }
+  }
+
   const created = await db.transaction(async (tx) => {
     const [{ max }] = await tx
       .select({ max: sql<number>`coalesce(max(${agentVersions.versionNumber}), 0)::int` })
@@ -384,6 +424,19 @@ router.post("/:agentId/versions", async (req: Request, res: Response) => {
   });
 
   res.status(201).json({ version: created });
+});
+
+// ── Live flow validation (for the graph designer) ─────────────────────────────
+// Validates a flow-config body without persisting anything, so the editor can
+// surface errors as the author works. The request body is the flow config.
+router.post("/:agentId/validate-flow", async (req: Request, res: Response) => {
+  const agent = await loadOrgAgent(req);
+  if (!agent) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
+  const errors = validateFlowConfigBody(req.body ?? {});
+  res.json({ valid: errors.length === 0, errors });
 });
 
 // ── Publish a version → live ──────────────────────────────────────────────────
