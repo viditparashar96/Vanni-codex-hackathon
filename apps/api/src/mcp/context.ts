@@ -1,19 +1,22 @@
 /**
  * MCP endpoint auth + org binding (PRD §6.17).
  *
- * Auth: `Authorization: Bearer <MCP_API_KEY>` — a single static key for now.
- * DB-backed per-org api_keys (hashed, scoped, revocable) replace this when the
- * api_keys table lands; the middleware is the only thing that changes.
+ * Auth accepts, in order:
+ *   1. An org API key (`vaa_…`, minted in Settings → API Keys) — the key's
+ *      hash resolves the owning org, so the MCP server is properly
+ *      multi-tenant: each key operates on its own workspace.
+ *   2. The legacy static MCP_API_KEY env (single-operator dev mode); org
+ *      binding falls back to MCP_ORG_ID or the first organization.
  *
- * Org binding: MCP_ORG_ID env when set, otherwise the first organization row
- * (single-tenant dev convenience). Writes are attributed to the org's owner
- * member, since MCP calls carry no session user.
+ * Writes are attributed to the org's owner member, since MCP calls carry no
+ * user session.
  */
 
 import type { Request, Response, NextFunction } from "express";
 import { asc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { member, organization } from "../db/schema/index.js";
+import { verifyKey } from "../lib/api-keys.js";
 
 export interface McpContext {
   orgId: string;
@@ -22,40 +25,65 @@ export interface McpContext {
   userId: string;
 }
 
-export function mcpAuth(req: Request, res: Response, next: NextFunction) {
-  const expected = process.env.MCP_API_KEY;
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      /** Org resolved from a per-org API key, when one authenticated the request. */
+      mcpOrgId?: string;
+    }
+  }
+}
 
-  if (!expected) {
-    if (process.env.NODE_ENV === "production") {
-      res.status(503).json({
-        jsonrpc: "2.0",
-        error: { code: -32000, message: "MCP disabled: MCP_API_KEY is not configured" },
-        id: null,
-      });
+function deny(res: Response, code: number, status: number, message: string) {
+  res.status(status).json({ jsonrpc: "2.0", error: { code, message }, id: null });
+}
+
+export async function mcpAuth(req: Request, res: Response, next: NextFunction) {
+  const header = String(req.headers.authorization ?? "");
+  const bearer = header.replace(/^Bearer\s+/i, "").trim();
+
+  // 1. Per-org API key.
+  if (bearer.startsWith("vaa_")) {
+    try {
+      const verified = await verifyKey(bearer);
+      if (verified) {
+        req.mcpOrgId = verified.orgId;
+        next();
+        return;
+      }
+    } catch (error) {
+      console.error("[mcp] key verification failed:", error);
+      deny(res, -32603, 500, "Key verification failed");
       return;
     }
-    next(); // dev convenience: open when no key is configured
+    deny(res, -32001, 401, "Invalid or revoked API key");
     return;
   }
 
-  const header = String(req.headers.authorization ?? "");
-  const key = header.replace(/^Bearer\s+/i, "").trim();
-  if (key !== expected) {
-    res.status(401).json({
-      jsonrpc: "2.0",
-      error: { code: -32001, message: "Invalid or missing API key" },
-      id: null,
-    });
+  // 2. Legacy static key (dev / single operator).
+  const expected = process.env.MCP_API_KEY;
+  if (!expected) {
+    if (process.env.NODE_ENV === "production") {
+      deny(res, -32000, 503, "MCP disabled: no API key configured");
+      return;
+    }
+    next(); // dev convenience: open when nothing is configured
+    return;
+  }
+  if (bearer !== expected) {
+    deny(res, -32001, 401, "Invalid or missing API key");
     return;
   }
   next();
 }
 
-export async function resolveMcpContext(): Promise<McpContext | null> {
-  const configured = process.env.MCP_ORG_ID;
+export async function resolveMcpContext(req: Request): Promise<McpContext | null> {
+  // Per-org key wins; then MCP_ORG_ID; then first org (single-tenant dev).
+  const pinned = req.mcpOrgId ?? process.env.MCP_ORG_ID;
 
-  const [org] = configured
-    ? await db.select().from(organization).where(eq(organization.id, configured))
+  const [org] = pinned
+    ? await db.select().from(organization).where(eq(organization.id, pinned))
     : await db.select().from(organization).orderBy(asc(organization.createdAt)).limit(1);
   if (!org) return null;
 

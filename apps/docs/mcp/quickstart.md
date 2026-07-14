@@ -12,10 +12,15 @@ POST http://localhost:4000/api/mcp        (Streamable HTTP, stateless)
 Authorization: Bearer <MCP_API_KEY>
 ```
 
-Set `MCP_API_KEY` in `apps/api/.env` (any string; `openssl rand -hex 24`).
-When unset, the endpoint is **open in dev** and **disabled in production**.
-The server binds to `MCP_ORG_ID`, or the first organization when unset —
-sign up once in the dashboard so an org exists.
+## Get an API key
+
+**Dashboard → Settings → API & Webhooks → Create key.** The key (`vaa_…`) is
+shown once — copy it there. Each key is bound to the workspace it was created
+in: MCP requests authenticated with it read and write **that org only**.
+Revoking the key in the same screen cuts access immediately.
+
+(Operator fallback: a static `MCP_API_KEY` env on the API still works for
+single-tenant dev — it binds to `MCP_ORG_ID` or the first organization.)
 
 ## Connect
 

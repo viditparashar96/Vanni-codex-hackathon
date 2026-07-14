@@ -1,6 +1,6 @@
 "use client";
 
-import type { Agent, AgentStatus, AgentType, VoiceConfig } from "@/types";
+import type { Agent, AgentStatus, AgentType, ApiKey, VoiceConfig } from "@/types";
 
 /**
  * Client-side mutations for the Vaani platform API.
@@ -230,4 +230,9 @@ export const api = {
     mutate<{ ok: boolean; id: string }>(`/agents/${id}`, "DELETE"),
   createTestSession: (agentId: string) =>
     mutate<TestSession>(`/calls/${agentId}/test-session`, "POST", {}),
+  /** Returns the raw key exactly once — it is never retrievable again. */
+  createApiKey: (name: string) =>
+    mutate<ApiKey & { key: string }>(`/api-keys`, "POST", { name }),
+  revokeApiKey: (keyId: string) =>
+    mutate<{ revoked: boolean; id: string }>(`/api-keys/${keyId}`, "DELETE"),
 };

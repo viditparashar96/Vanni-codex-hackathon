@@ -9,6 +9,7 @@ import agentsRouter from "./routes/agents.js";
 import callsRouter from "./routes/calls.js";
 import analyticsRouter from "./routes/analytics.js";
 import creditsRouter from "./routes/credits.js";
+import apiKeysRouter from "./routes/api-keys.js";
 import internalRouter from "./routes/internal.js";
 import { mcpAuth, resolveMcpContext } from "./mcp/context.js";
 import { buildMcpServer } from "./mcp/server.js";
@@ -34,6 +35,7 @@ app.use("/api/orgs/:orgId/agents", requireAuth, agentsRouter);
 app.use("/api/orgs/:orgId/calls", requireAuth, callsRouter);
 app.use("/api/orgs/:orgId/analytics", requireAuth, analyticsRouter);
 app.use("/api/orgs/:orgId/credits", requireAuth, creditsRouter);
+app.use("/api/orgs/:orgId/api-keys", requireAuth, apiKeysRouter);
 
 // Cluster-internal engine callbacks (no session auth).
 app.use("/api/internal", internalRouter);
@@ -43,7 +45,7 @@ app.use("/api/internal", internalRouter);
 // resolved org so any MCP client can build + operate voice agents.
 app.post("/api/mcp", mcpAuth, async (req, res) => {
   try {
-    const ctx = await resolveMcpContext();
+    const ctx = await resolveMcpContext(req);
     if (!ctx) {
       res.status(503).json({
         jsonrpc: "2.0",
