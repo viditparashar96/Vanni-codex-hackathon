@@ -19,7 +19,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
       <div className="pt-6 pb-8">
         <div className="eyebrow flex items-center gap-2 text-muted-foreground">
           <span className="pulse-dot" />
-          Cedarline Health
+          Acme Inc
         </div>
         <h1 className="display mt-3 text-[clamp(28px,3.2vw,40px)] text-ink">Settings</h1>
       </div>

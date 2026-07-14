@@ -49,11 +49,20 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
  * Reads — Server Components, cookie forwarded via server-api
  * ------------------------------------------------------------------------ */
 
-/** Read a list/object endpoint; falls back to mock only when unconfigured. */
+/**
+ * Read a list/object endpoint. Falls back to mock when the backend is
+ * unconfigured OR when the endpoint isn't implemented yet (404), so pages for
+ * not-yet-built domains degrade gracefully instead of crashing.
+ */
 async function get<T>(path: string, fallback: T): Promise<T> {
   if (!API_URL) return fallback;
-  const { orgGet } = await import("./server-api");
-  return orgGet<T>(path);
+  const { orgGet, OrgApiError } = await import("./server-api");
+  try {
+    return await orgGet<T>(path);
+  } catch (err) {
+    if (err instanceof OrgApiError && err.status === 404) return fallback;
+    throw err;
+  }
 }
 
 /**

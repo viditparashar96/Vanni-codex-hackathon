@@ -24,7 +24,7 @@ export default function GeneralSettingsPage() {
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
             <div className="eyebrow mb-2 text-[10px] text-ink">Name</div>
-            <Input defaultValue="Cedarline Health" className="h-11 rounded-xl border-[1.5px] border-input" />
+            <Input defaultValue="Acme Inc" className="h-11 rounded-xl border-[1.5px] border-input" />
           </div>
           <div>
             <div className="eyebrow mb-2 text-[10px] text-ink">Timezone</div>

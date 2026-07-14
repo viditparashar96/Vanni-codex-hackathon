@@ -166,9 +166,12 @@ function voiceFromFlat(
 ): Partial<VoiceConfig> | undefined {
   if (!v) return undefined;
   const out: Partial<VoiceConfig> = {};
+  // The dashboard form uses model names for LLM/STT but a PROVIDER name for TTS
+  // (e.g. "cartesia"), and a friendly voice label. Map accordingly and let the
+  // engine apply its provider defaults for anything omitted (e.g. TTS model).
   if (v.llm !== undefined) out.llmModel = v.llm;
   if (v.stt !== undefined) out.sttModel = v.stt;
-  if (v.tts !== undefined) out.ttsModel = v.tts;
+  if (v.tts !== undefined) out.ttsProvider = v.tts as VoiceConfig["ttsProvider"];
   if (v.voice !== undefined) out.ttsVoice = v.voice;
   if (v.language !== undefined) out.language = v.language;
   return Object.keys(out).length ? out : undefined;

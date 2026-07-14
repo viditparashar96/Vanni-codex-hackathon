@@ -49,7 +49,7 @@ const initialNodes: Node[] = [
       label: "Greet & verify identity",
       task: "Confirm you're speaking with the patient. Verify DOB before discussing any appointment details.",
       toolCount: 1,
-      firstMessage: "Hi, this is Riya calling from Cedarline Health about an upcoming appointment.",
+      firstMessage: "Hi, this is Riya calling from Acme Inc about an upcoming appointment.",
     },
   },
   {

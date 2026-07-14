@@ -4,9 +4,11 @@ import * as React from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { CommandPalette } from "@/components/shell/command-palette";
+import type { SessionSummary } from "@/lib/server-api";
 
-export function Topbar() {
+export function Topbar({ summary }: { summary?: SessionSummary }) {
   const [open, setOpen] = React.useState(false);
+  const initials = summary?.user?.initials ?? "··";
 
   return (
     <header className="flex items-center justify-between gap-3 px-4 pt-5 pb-2 sm:px-6 md:gap-4 md:px-8 md:pt-6">
@@ -24,16 +26,12 @@ export function Topbar() {
       </button>
 
       <div className="flex items-center gap-3">
-        <Link href="/history" className="sticker hidden text-[10px] sm:inline-flex">
-          <span className="pulse-dot pulse-dot-live" />
-          2 live calls
-        </Link>
         <Link
           href="/settings/general"
           className="flex size-9 items-center justify-center rounded-full border-[1.5px] border-ink bg-brand-yellow font-display text-[12px] font-black text-ink shadow-[2px_2px_0_var(--ink)] transition-transform hover:-translate-y-0.5"
           aria-label="Your profile"
         >
-          SP
+          {initials}
         </Link>
       </div>
 

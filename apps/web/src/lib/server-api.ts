@@ -40,6 +40,63 @@ interface OrgSummary {
   slug?: string;
 }
 
+export interface SessionSummary {
+  user: { name: string; email: string; initials: string } | null;
+  org: { id: string; name: string; plan: string } | null;
+  credits: { balance: number; burnLast7d: number } | null;
+}
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
+}
+
+/**
+ * Everything the dashboard chrome (sidebar + topbar) needs about the current
+ * session: the signed-in user, their active org, and the org's credit balance.
+ * Resolved once per request. Returns nulls (not throws) so the shell degrades
+ * gracefully rather than crashing the whole layout.
+ */
+export const getSessionSummary = cache(async (): Promise<SessionSummary> => {
+  const cookie = await forwardedCookieHeader();
+  const empty: SessionSummary = { user: null, org: null, credits: null };
+
+  try {
+    const [sessionRes, orgRes] = await Promise.all([
+      fetch(`${API_URL}/api/auth/get-session`, { headers: { Cookie: cookie }, cache: "no-store" }),
+      fetch(`${API_URL}/api/auth/organization/list`, { headers: { Cookie: cookie }, cache: "no-store" }),
+    ]);
+    if (sessionRes.status === 401) redirect("/login");
+
+    const session = (await sessionRes.json().catch(() => null)) as
+      | { user?: { name?: string; email?: string } }
+      | null;
+    const orgs = (await orgRes.json().catch(() => null)) as OrgSummary[] | null;
+    const org = Array.isArray(orgs) && orgs[0] ? orgs[0] : null;
+
+    let credits: SessionSummary["credits"] = null;
+    if (org?.id) {
+      const cRes = await fetch(`${API_URL}/api/orgs/${org.id}/credits`, {
+        headers: { Cookie: cookie },
+        cache: "no-store",
+      });
+      if (cRes.ok) credits = await cRes.json().catch(() => null);
+    }
+
+    const name = session?.user?.name ?? "";
+    const email = session?.user?.email ?? "";
+    return {
+      user: session?.user ? { name, email, initials: initialsOf(name || email) } : null,
+      org: org ? { id: org.id, name: org.name ?? "Workspace", plan: "Free" } : null,
+      credits,
+    };
+  } catch {
+    return empty;
+  }
+});
+
 /**
  * Resolve the caller's active organization id.
  *

@@ -17,7 +17,7 @@ export default async function AcceptInvitationPage({
         <h1 className="display mt-6 text-[30px] text-ink">
           You&apos;re invited to
           <br />
-          Cedarline Health.
+          Acme Inc.
         </h1>
         <p className="mt-3 text-[14px] leading-relaxed text-muted-foreground">
           Grace Obi invited you as an <strong className="text-ink">Agent Builder</strong> — you&apos;ll be able to

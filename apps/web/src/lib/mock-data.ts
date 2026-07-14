@@ -374,11 +374,11 @@ export const mockKbs: KnowledgeBase[] = [
 ];
 
 export const mockTools: ToolDef[] = [
-  { id: "tool_lookup", name: "lookup_patient", description: "Find a patient record by phone or DOB.", method: "GET", url: "https://ehr.Acme.health/api/patients", authType: "bearer", timeoutMs: 4000, usedByAgents: 4, updatedAt: "2026-06-30T10:00:00Z" },
-  { id: "tool_slots", name: "get_open_slots", description: "List open appointment slots for a provider and week.", method: "GET", url: "https://ehr.Acme.health/api/slots", authType: "bearer", timeoutMs: 5000, usedByAgents: 3, updatedAt: "2026-06-30T10:02:00Z" },
-  { id: "tool_book", name: "book_appointment", description: "Book, reschedule or cancel an appointment.", method: "POST", url: "https://ehr.Acme.health/api/appointments", authType: "bearer", timeoutMs: 6000, usedByAgents: 3, updatedAt: "2026-07-02T15:30:00Z" },
-  { id: "tool_refill", name: "check_refill_status", description: "Check pharmacy refill eligibility and status.", method: "GET", url: "https://rx.Acme.health/api/refills", authType: "api_key", timeoutMs: 4000, usedByAgents: 1, updatedAt: "2026-05-06T12:20:00Z" },
-  { id: "tool_ticket", name: "create_ticket", description: "Open a billing or admin ticket in the helpdesk.", method: "POST", url: "https://desk.Acme.health/api/tickets", authType: "api_key", timeoutMs: 5000, usedByAgents: 2, updatedAt: "2026-06-11T09:00:00Z" },
+  { id: "tool_lookup", name: "lookup_patient", description: "Find a patient record by phone or DOB.", method: "GET", url: "https://ehr.Acme.example/api/patients", authType: "bearer", timeoutMs: 4000, usedByAgents: 4, updatedAt: "2026-06-30T10:00:00Z" },
+  { id: "tool_slots", name: "get_open_slots", description: "List open appointment slots for a provider and week.", method: "GET", url: "https://ehr.Acme.example/api/slots", authType: "bearer", timeoutMs: 5000, usedByAgents: 3, updatedAt: "2026-06-30T10:02:00Z" },
+  { id: "tool_book", name: "book_appointment", description: "Book, reschedule or cancel an appointment.", method: "POST", url: "https://ehr.Acme.example/api/appointments", authType: "bearer", timeoutMs: 6000, usedByAgents: 3, updatedAt: "2026-07-02T15:30:00Z" },
+  { id: "tool_refill", name: "check_refill_status", description: "Check pharmacy refill eligibility and status.", method: "GET", url: "https://rx.Acme.example/api/refills", authType: "api_key", timeoutMs: 4000, usedByAgents: 1, updatedAt: "2026-05-06T12:20:00Z" },
+  { id: "tool_ticket", name: "create_ticket", description: "Open a billing or admin ticket in the helpdesk.", method: "POST", url: "https://desk.Acme.example/api/tickets", authType: "api_key", timeoutMs: 5000, usedByAgents: 2, updatedAt: "2026-06-11T09:00:00Z" },
 ];
 
 export const mockRecordings: Recording[] = [
@@ -396,11 +396,11 @@ export const mockNumbers: PhoneNumber[] = [
 ];
 
 export const mockMembers: Member[] = [
-  { id: "mem_1", name: "Soumya Panda", email: "soumya@Acme.health", role: "owner", status: "active", joinedAt: "2026-04-01T08:00:00Z" },
-  { id: "mem_2", name: "Grace Obi", email: "grace@Acme.health", role: "admin", status: "active", joinedAt: "2026-04-03T10:00:00Z" },
-  { id: "mem_3", name: "Marcus Lee", email: "marcus@Acme.health", role: "agent_builder", status: "active", joinedAt: "2026-04-20T09:30:00Z" },
-  { id: "mem_4", name: "Priya Raman", email: "priya@Acme.health", role: "agent_builder", status: "active", joinedAt: "2026-05-11T14:00:00Z" },
-  { id: "mem_5", name: "Dana Whitcomb", email: "dana.w@Acme.health", role: "viewer", status: "invited", joinedAt: "2026-07-10T16:00:00Z" },
+  { id: "mem_1", name: "Demo Founder", email: "founder@acme.example", role: "owner", status: "active", joinedAt: "2026-04-01T08:00:00Z" },
+  { id: "mem_2", name: "Grace Obi", email: "grace@acme.example", role: "admin", status: "active", joinedAt: "2026-04-03T10:00:00Z" },
+  { id: "mem_3", name: "Marcus Lee", email: "marcus@acme.example", role: "agent_builder", status: "active", joinedAt: "2026-04-20T09:30:00Z" },
+  { id: "mem_4", name: "Priya Raman", email: "priya@acme.example", role: "agent_builder", status: "active", joinedAt: "2026-05-11T14:00:00Z" },
+  { id: "mem_5", name: "Dana Whitcomb", email: "dana.w@acme.example", role: "viewer", status: "invited", joinedAt: "2026-07-10T16:00:00Z" },
 ];
 
 export const mockApiKeys: ApiKey[] = [

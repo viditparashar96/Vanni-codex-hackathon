@@ -20,7 +20,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ORG, mockCredits } from "@/lib/mock-data";
+import type { SessionSummary } from "@/lib/server-api";
 import {
   Tooltip,
   TooltipContent,
@@ -57,7 +57,7 @@ const NAV: { group: string | null; items: NavItem[] }[] = [
     group: "Operate",
     items: [
       { href: "/campaigns", label: "Campaigns", icon: Megaphone },
-      { href: "/history", label: "History", icon: PhoneCall, badge: "2 live" },
+      { href: "/history", label: "History", icon: PhoneCall },
       { href: "/analytics", label: "Analytics", icon: ChartNoAxesColumn },
     ],
   },
@@ -71,10 +71,16 @@ const NAV: { group: string | null; items: NavItem[] }[] = [
   },
 ];
 
-export function Sidebar() {
+export function Sidebar({ summary }: { summary?: SessionSummary }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = React.useState(false);
   const isPhone = useMediaQuery("(max-width: 767px)");
+
+  const orgName = summary?.org?.name ?? "Your workspace";
+  const plan = summary?.org?.plan ?? "Free";
+  const initial = (summary?.user?.initials ?? orgName[0] ?? "V").slice(0, 1).toUpperCase();
+  const balance = summary?.credits?.balance ?? 0;
+  const burn = summary?.credits?.burnLast7d ?? 0;
 
   React.useEffect(() => {
     setCollapsed(window.localStorage.getItem("vaani.sidebar") === "rail");
@@ -93,7 +99,15 @@ export function Sidebar() {
       : pathname === href || pathname.startsWith(href.split("/").slice(0, 2).join("/") + "/");
 
   if (isPhone) {
-    return <MobileSidebar pathname={pathname} isActive={isActive} />;
+    return (
+      <MobileSidebar
+        pathname={pathname}
+        isActive={isActive}
+        orgName={orgName}
+        plan={plan}
+        initial={initial}
+      />
+    );
   }
 
   return (
@@ -184,25 +198,25 @@ export function Sidebar() {
               <div className="flex items-baseline justify-between">
                 <span className="eyebrow text-[9.5px] text-sidebar-foreground/50">Credits</span>
                 <span className="figure text-[17px] text-sidebar-primary">
-                  ${mockCredits.balance.toFixed(2)}
+                  ${balance.toFixed(2)}
                 </span>
               </div>
               <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-sidebar-border">
                 <div className="h-full w-[68%] rounded-full bg-sidebar-primary" />
               </div>
               <div className="mt-1.5 text-[10.5px] text-sidebar-foreground/55">
-                ${mockCredits.burnLast7d.toFixed(2)} used this week
+                ${burn.toFixed(2)} used this week
               </div>
             </Link>
           )}
           <div className={cn("flex items-center gap-2.5", collapsed && "justify-center")}>
             <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary font-display text-[12px] font-black text-sidebar-primary-foreground">
-              C
+              {initial}
             </div>
             {!collapsed && (
               <div className="min-w-0">
-                <div className="truncate text-[12.5px] font-semibold text-paper">{ORG.name}</div>
-                <div className="text-[10.5px] text-sidebar-foreground/50">{ORG.plan} plan</div>
+                <div className="truncate text-[12.5px] font-semibold text-paper">{orgName}</div>
+                <div className="text-[10.5px] text-sidebar-foreground/50">{plan} plan</div>
               </div>
             )}
           </div>
@@ -233,9 +247,15 @@ export function Sidebar() {
 function MobileSidebar({
   pathname,
   isActive,
+  orgName,
+  plan,
+  initial,
 }: {
   pathname: string;
   isActive: (href: string) => boolean;
+  orgName: string;
+  plan: string;
+  initial: string;
 }) {
   const [open, setOpen] = React.useState(false);
 
@@ -290,10 +310,10 @@ function MobileSidebar({
         </nav>
         <div className="border-t border-sidebar-border p-4">
           <Link href="/settings/general" className="flex min-h-11 items-center gap-2.5">
-            <div className="flex size-8 items-center justify-center rounded-full bg-sidebar-primary font-display text-[12px] font-black text-sidebar-primary-foreground">C</div>
+            <div className="flex size-8 items-center justify-center rounded-full bg-sidebar-primary font-display text-[12px] font-black text-sidebar-primary-foreground">{initial}</div>
             <div>
-              <div className="text-[12.5px] font-semibold text-paper">{ORG.name}</div>
-              <div className="text-[10.5px] text-sidebar-foreground/50">{ORG.plan} plan</div>
+              <div className="text-[12.5px] font-semibold text-paper">{orgName}</div>
+              <div className="text-[10.5px] text-sidebar-foreground/50">{plan} plan</div>
             </div>
           </Link>
         </div>

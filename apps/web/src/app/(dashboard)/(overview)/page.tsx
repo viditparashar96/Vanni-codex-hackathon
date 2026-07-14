@@ -1,16 +1,26 @@
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight, Radio, Sparkles } from "lucide-react";
 import { api } from "@/lib/api";
+import { getSessionSummary } from "@/lib/server-api";
 import { fmtAgo, fmtClock, fmtDuration, fmtInt, fmtMoney } from "@/lib/format";
 import { StatusChip } from "@/components/shared/status-chip";
 
 export default async function OverviewPage() {
-  const [calls, analytics, credits, agents] = await Promise.all([
+  const [calls, analytics, credits, agents, summary] = await Promise.all([
     api.getCalls(),
     api.getAnalytics(),
     api.getCredits(),
     api.getAgents(),
+    getSessionSummary(),
   ]);
+
+  const orgName = summary.org?.name ?? "Your workspace";
+  const firstName = (summary.user?.name ?? "there").trim().split(/\s+/)[0] || "there";
+  const todayLabel = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
 
   const live = calls.filter((c) => c.status === "in_progress");
   const recent = calls.filter((c) => c.status !== "in_progress").slice(0, 8);
@@ -24,12 +34,11 @@ export default async function OverviewPage() {
         <div>
           <div className="eyebrow flex items-center gap-2 text-muted-foreground">
             <span className="pulse-dot" />
-            Cedarline Health · Tuesday, July 14
+            {orgName} · {todayLabel}
           </div>
           <h1 className="display mt-4 text-[clamp(34px,4.2vw,54px)] text-ink">
-            <span className="word-reveal"><span>Good</span></span>{" "}
-            <span className="word-reveal"><span>afternoon,</span></span>{" "}
-            <span className="word-reveal"><span>Soumya.</span></span>
+            <span className="word-reveal"><span>Welcome,</span></span>{" "}
+            <span className="word-reveal"><span>{firstName}.</span></span>
             <br />
             <span className="word-reveal"><span className="text-muted-foreground/70">Your</span></span>{" "}
             <span className="word-reveal"><span className="text-muted-foreground/70">agents are humming.</span></span>

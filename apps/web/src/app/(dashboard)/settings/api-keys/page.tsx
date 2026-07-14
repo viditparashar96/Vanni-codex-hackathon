@@ -3,8 +3,8 @@ import { api } from "@/lib/api";
 import { fmtAgo, fmtDay } from "@/lib/format";
 
 const WEBHOOK_ENDPOINTS = [
-  { url: "https://ehr.cedarline.health/hooks/vaani", events: ["call.completed", "call.failed"], healthy: true },
-  { url: "https://desk.cedarline.health/hooks/credits", events: ["credits.low"], healthy: true },
+  { url: "https://ehr.acme.example/hooks/vaani", events: ["call.completed", "call.failed"], healthy: true },
+  { url: "https://desk.acme.example/hooks/credits", events: ["credits.low"], healthy: true },
 ];
 
 export default async function ApiKeysPage() {

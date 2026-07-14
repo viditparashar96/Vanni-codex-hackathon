@@ -20,6 +20,7 @@ import pathlib
 
 import httpx
 from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from loguru import logger
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
@@ -29,6 +30,16 @@ from engine.config import settings
 from engine.contract import AgentConfig, DispatchAck, DispatchRequest, EndOfCallReport
 
 app = FastAPI(title="Vaani Voice Engine")
+
+# The browser posts its WebRTC offer here cross-origin (dashboard on :3000 →
+# engine on :7860), so allow the CORS preflight. Permissive by design: the
+# offer carries no secrets and the call is authorized upstream at dispatch.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 _STATIC = pathlib.Path(__file__).parent / "static"
 _ICE_SERVERS = ["stun:stun.l.google.com:19302"]
