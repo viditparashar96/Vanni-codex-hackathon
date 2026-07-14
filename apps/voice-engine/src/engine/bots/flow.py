@@ -78,7 +78,14 @@ async def run_flow_bot(
     gcs: GlobalCallSettings = flow.global_call_settings or GlobalCallSettings()
 
     values = build_flow_variable_map(flow, dispatch.variables, gcs.timezone)
-    runtime = FlowRuntime(flow, values, cfg.tools)
+    # Notify the browser which node is active on each entry, so the flow-editor
+    # canvas can highlight the current stage during a live test call. The client
+    # reads {type:"flow_node_change", nodeId} off the SmallWebRTC data channel.
+    def _emit_node_change(node_id: str) -> None:
+        connection.send_app_message({"type": "flow_node_change", "nodeId": node_id})
+        logger.info(f"[flow] entered node '{node_id}' (notified client)")
+
+    runtime = FlowRuntime(flow, values, cfg.tools, on_node_enter=_emit_node_change)
 
     stt = create_stt_service(cfg.voice)
     llm = create_llm_service(cfg.voice)

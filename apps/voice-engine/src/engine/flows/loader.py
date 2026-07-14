@@ -30,7 +30,7 @@ branch. Nothing here places a real call, and nothing raises.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from loguru import logger
 from pipecat.flows import (
@@ -77,11 +77,20 @@ class FlowRuntime:
         tools: Resolved HTTP tools from the agent config, indexed here by id.
     """
 
-    def __init__(self, flow: FlowConfig, values: dict[str, str], tools: list[HttpTool]):
+    def __init__(
+        self,
+        flow: FlowConfig,
+        values: dict[str, str],
+        tools: list[HttpTool],
+        on_node_enter: Callable[[str], None] | None = None,
+    ):
         self.flow = flow
         self.base_values = values
         self._tools_by_id = {t.id: t for t in tools}
         self._nodes: dict[str, FlowNode] = {n.id: n for n in flow.nodes}
+        # Called with the node id each time a node is compiled (i.e. entered), so
+        # the caller can notify the client for live canvas highlighting.
+        self._on_node_enter = on_node_enter
 
         initial = next((n for n in flow.nodes if n.type == "initial"), None)
         if initial is None:
@@ -108,6 +117,13 @@ class FlowRuntime:
         if node is None:
             logger.warning(f"[flow] build_node: unknown node id '{node_id}'")
             return None
+
+        # Entering this node — notify the client (live node highlighting).
+        if self._on_node_enter is not None:
+            try:
+                self._on_node_enter(node_id)
+            except Exception:
+                logger.warning(f"[flow] on_node_enter callback failed for '{node_id}'")
 
         data = node.data
         values = self._runtime_values(flow_manager)
