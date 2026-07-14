@@ -9,6 +9,9 @@ dependencies = [
     # longer needed and conflicts, so it is intentionally NOT a dependency.
     "pipecat-ai[deepgram,openai,groq,anthropic,google,assemblyai,elevenlabs,azure,cartesia,silero,webrtc]>=1.5.0,<2.0.0",
     "pipecat-ai-small-webrtc-prebuilt>=0.0.4",
+    # deepgram-sdk 7.x uses the websockets *legacy* API, which races/asserts on
+    # websockets 16.x (STT keepalive crash). Pin to a legacy-stable line.
+    "websockets>=13.1,<14",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
     "pydantic>=2.9.0",

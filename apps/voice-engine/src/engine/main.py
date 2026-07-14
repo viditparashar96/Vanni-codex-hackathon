@@ -1,14 +1,17 @@
 """Vaani voice engine — FastAPI dispatch + SmallWebRTC signaling.
 
 Flow (Phase 1, SmallWebRTC):
-  1. POST /dispatch      — API (or the test page) registers a DispatchRequest.
-  2. POST /api/offer     — browser sends its WebRTC offer + call_id; we build the
-                           pipeline for that call and return the answer. The bot
+  1. POST /dispatch      — API (or a client) registers a DispatchRequest.
+  2. POST /api/offer     — browser sends its WebRTC offer (+ optional call_id);
+                           we build the pipeline and return the answer. The bot
                            runs as a background task until the client disconnects.
   3. POST <callbacks.report> — the engine posts the mandatory end-of-call report.
 
-A dev report sink (/dev/report-sink) lets you see reports before the platform API
-exists. The test client is served at GET / .
+The browser client is Pipecat's official prebuilt SmallWebRTC UI, mounted at `/`
+(known-good mic + audio playback). When it connects without a linked dispatch we
+fall back to the most-recent /dispatch, then to a built-in default agent — so the
+page "just works" for a quick test. A dev report sink (/dev/report-sink) lets you
+see reports before the platform API exists.
 """
 
 from __future__ import annotations
@@ -20,10 +23,11 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from loguru import logger
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
+from pipecat_ai_small_webrtc_prebuilt.frontend import SmallWebRTCPrebuiltUI
 
 from engine.bots.base import run_simple_bot
 from engine.config import settings
-from engine.contract import DispatchAck, DispatchRequest, EndOfCallReport
+from engine.contract import AgentConfig, DispatchAck, DispatchRequest, EndOfCallReport
 
 app = FastAPI(title="Vaani Voice Engine")
 
@@ -36,6 +40,44 @@ _pending: dict[str, DispatchRequest] = {}
 _pcs: dict[str, SmallWebRTCConnection] = {}
 
 
+def _default_dispatch(call_id: str) -> DispatchRequest:
+    """Built-in agent used when the prebuilt UI connects with no linked dispatch."""
+    return DispatchRequest.model_validate(
+        {
+            "callId": call_id,
+            "orgId": "org_dev",
+            "agentId": "agt_default",
+            "versionId": "v1",
+            "mode": "web_test",
+            "direction": "inbound",
+            "transport": {"type": "smallwebrtc"},
+            "agentConfig": {
+                "type": "simple",
+                "voice": {
+                    "llmProvider": "openai",
+                    "llmModel": "gpt-4.1-mini",
+                    "sttProvider": "deepgram",
+                    "ttsProvider": "cartesia",
+                    "language": "en",
+                },
+                "persona": {
+                    "systemPrompt": (
+                        "You are Vaani, a warm, concise voice receptionist for Bright Smile "
+                        "Dental. Keep replies to one or two short sentences."
+                    ),
+                    "agentSpeaksFirst": True,
+                    "greetingMessage": "Hi, this is Vaani at Bright Smile Dental. How can I help you today?",
+                },
+            },
+            "variables": {},
+            "callbacks": {"report": "/dev/report-sink", "events": "/dev/report-sink"},
+        }
+    )
+
+
+# ── API routes (defined BEFORE the static mount so they take precedence) ─────
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "pending": len(_pending), "active": len(_pcs)}
@@ -43,8 +85,7 @@ async def health():
 
 @app.post("/dispatch")
 async def dispatch(req: DispatchRequest) -> DispatchAck:
-    """Register a call. In production the platform API calls this; the test page
-    calls it too. Stores the resolved config until the browser sends its offer."""
+    """Register a call. In production the platform API calls this; a client may too."""
     _pending[req.call_id] = req
     logger.info(f"[dispatch] registered call {req.call_id} agent={req.agent_id} mode={req.mode}")
     return DispatchAck(call_id=req.call_id, accepted=True, reason="offer at POST /api/offer")
@@ -52,9 +93,8 @@ async def dispatch(req: DispatchRequest) -> DispatchAck:
 
 @app.post("/api/offer")
 async def offer(request: dict, background_tasks: BackgroundTasks):
-    """WebRTC signaling. Body: { sdp, type, call_id, pc_id? }."""
+    """WebRTC signaling. Body: { sdp, type, pc_id?, call_id? }."""
     pc_id = request.get("pc_id")
-
     if pc_id and pc_id in _pcs:
         conn = _pcs[pc_id]
         await conn.renegotiate(
@@ -62,10 +102,17 @@ async def offer(request: dict, background_tasks: BackgroundTasks):
         )
         return conn.get_answer()
 
+    if "sdp" not in request or "type" not in request:
+        raise HTTPException(status_code=400, detail="offer requires 'sdp' and 'type'")
+
+    # Resolve which agent runs this call: explicit call_id > most-recent pending > default.
     call_id = request.get("call_id")
-    dispatch_req = _pending.get(call_id) if call_id else None
+    dispatch_req = _pending.pop(call_id, None) if call_id else None
+    if dispatch_req is None and _pending:
+        _, dispatch_req = _pending.popitem()  # most-recent dispatch
     if dispatch_req is None:
-        raise HTTPException(status_code=404, detail=f"no dispatched call for call_id={call_id!r}")
+        dispatch_req = _default_dispatch(call_id or "call_dev")
+        logger.info(f"[offer] no linked dispatch — using built-in default agent ({dispatch_req.call_id})")
 
     conn = SmallWebRTCConnection(_ICE_SERVERS)
     await conn.initialize(sdp=request["sdp"], type=request["type"])
@@ -79,13 +126,15 @@ async def offer(request: dict, background_tasks: BackgroundTasks):
 
     answer = conn.get_answer()
     _pcs[answer["pc_id"]] = conn
-    _pending.pop(call_id, None)  # consumed
     return answer
 
 
 def _make_report_sink(req: DispatchRequest):
+    url = req.callbacks.report
+    if url.startswith("/"):  # relative → resolve against this engine
+        url = f"http://127.0.0.1:{settings.port}{url}"
+
     async def sink(report: EndOfCallReport):
-        url = req.callbacks.report
         payload = report.model_dump(by_alias=True, exclude_none=True)
         try:
             async with httpx.AsyncClient(timeout=10) as client:
@@ -100,15 +149,24 @@ def _make_report_sink(req: DispatchRequest):
 @app.post("/dev/report-sink")
 async def dev_report_sink(report: dict):
     """Local sink so you can SEE the end-of-call report without the platform API."""
-    logger.info(f"[dev/report-sink] {report.get('callId')} status={report.get('status')} "
-                f"turns={report.get('metrics', {}).get('turns')} "
-                f"transcript_lines={len(report.get('transcript', []))}")
+    logger.info(
+        f"[dev/report-sink] {report.get('callId')} status={report.get('status')} "
+        f"turns={report.get('metrics', {}).get('turns')} "
+        f"transcript_lines={len(report.get('transcript', []))}"
+    )
+    for entry in report.get("transcript", []):
+        logger.info(f"    {entry.get('role')}: {entry.get('text')}")
     return JSONResponse({"received": True})
 
 
-@app.get("/")
-async def index():
+@app.get("/custom")
+async def custom_console():
+    """Fallback hand-rolled test page (the prebuilt UI at / is preferred)."""
     return FileResponse(_STATIC / "index.html")
+
+
+# ── Static mount LAST: serves the prebuilt WebRTC UI at / (catches unmatched paths) ──
+app.mount("/", SmallWebRTCPrebuiltUI)
 
 
 def main():
