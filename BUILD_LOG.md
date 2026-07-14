@@ -19,7 +19,9 @@
 | 2026-07-14 | **Media transport: SmallWebRTC first**, LiveKit deferred to Phase 6 | Zero extra infra to get a browser talking to an agent; swap to LiveKit only when we add telephony |
 | 2026-07-14 | **Scope target: through Phase 5** (simple agents + tools + KB + post-call + flow agents) | Best effort/impact ratio for the hackathon; telephony (Phase 6) is stretch |
 | 2026-07-14 | **Pipecat Flows IS in core as `pipecat.flows`** (v1.5.0). Removed the standalone `pipecat-ai-flows` dep. | **Confirmed at runtime** — Pipecat 1.5.0 emits: *"the separate pipecat-ai-flows package is installed alongside a version that already includes Flows as `pipecat.flows`… uninstall it."* The user was right. (An earlier `uv lock` had co-installed both, and the June hub snapshot predated the merge — the running runtime is ground truth.) Flow runtime (Phase 5) imports from `pipecat.flows`. |
-| 2026-07-14 | Flow runtime targets the **modern dynamic-flows API** (`FlowManager`, `NodeConfig` built at runtime), not the removed static `FlowConfig` dicts | The reference repo used the old static API; dynamic is current |
+| 2026-07-14 | Flow runtime targets the **modern dynamic-flows API** (`FlowManager`, `NodeConfig` built at runtime) | Dynamic is current in `pipecat.flows` (1.5.0) |
+| 2026-07-14 | **Dedicated Neon DB** (`ep-cool-shadow-adfokmck`, us-east-1) — NOT the earlier shared DB (`raspy-dream`, which holds another project's tables) | Avoid clobbering existing data. All tables namespaced under a `vaani` Postgres schema (`schemaFilter:["vaani"]`) for extra isolation. Migrations need the DIRECT (non-pooler) host; pooler hangs on DDL. |
+| 2026-07-14 | Priority reorder (user): **agent create→test loop first** (one user, simple + flow), polish RBAC later, LiveKit last | Get the core product working before hardening |
 | 2026-07-14 | Contract lives in `@vaani/shared` (Zod) with a **pydantic mirror** in the engine | Single boundary both services validate against |
 
 ---
@@ -39,8 +41,8 @@
 |------|------|--------|
 | **0 — Foundation** | Monorepo, docker stack, shared dispatch contract | ✅ **Done** (commit `2bcab4a`) |
 | **1 — Voice walking skeleton** | `voice-engine`: FastAPI dispatch + SmallWebRTC transport, STT→LLM→TTS, mandatory end-of-call report, browser test console | ✅ **DONE + LIVE-VERIFIED** — real two-way voice call confirmed in-browser (mic → Deepgram → GPT-4.1-mini → Cartesia → speaker) on 2026-07-14 |
-| **2 — API foundation** | Better Auth (orgs/members/roles), Drizzle schema (agents, agent_versions, calls), agents CRUD + versioning/publish, dispatch endpoint, internal callbacks, credit stub | ⬜ |
-| **3 — Close the loop** | Config resolution (DB→dispatch payload), calls/call_turns persistence, realtime feedback events (dual sink WS+DB) | ⬜ |
+| **2 — API foundation** | Better Auth (orgs/members/roles), Drizzle schema, agents CRUD + versioning/publish, dispatch endpoint, internal callbacks, credits | ✅ **DONE + LIVE** — full loop verified against dedicated Neon DB: signup→org→create agent→publish→test-session→engine dispatched. API on :4000 |
+| **3 — Close the loop** | Config resolution (DB→dispatch payload), calls persistence, realtime feedback events (dual sink WS+DB) | 🟡 **Partial** — config-resolver + dispatch + calls persistence + /api/internal report&events endpoints done. Live WS event stream pending |
 | **4 — Simple agent real** | Full advancedConfig (VAD, barge-in, greeting, variables), HTTP tools + end_call, KB (Qdrant RAG), post-call (summary + structured extraction + QA) | ⬜ |
 | **5 — Flow agents** | Dynamic-flows runtime (behind adapter), node types + transitions, flow validation | ⬜ (scope finish line) |
 | 6 — Telephony (stretch) | LiveKit SIP, Twilio+Plivo, inbound routing, outbound, transfer/DTMF/SMS | ⬜ deferred |
