@@ -11,6 +11,17 @@ from engine.contract import VoiceConfig
 
 # A safe default Cartesia voice so a call works before a voice is chosen.
 _DEFAULT_CARTESIA_VOICE = "71a7ad14-091c-4e8e-a314-022ece01c121"
+_DEFAULT_CARTESIA_MODEL = "sonic-3.5"
+
+
+def _cartesia_model(configured: str | None) -> str:
+    """Only accept real Cartesia model names (they start with 'sonic'); anything
+    else (e.g. a provider name that leaked into the model field) falls back."""
+    if configured and configured.lower().startswith("sonic"):
+        return configured
+    if configured:
+        logger.warning(f"[tts] '{configured}' is not a Cartesia model — using {_DEFAULT_CARTESIA_MODEL}")
+    return _DEFAULT_CARTESIA_MODEL
 
 
 def _cartesia_voice_id(configured: str | None) -> str:
@@ -38,7 +49,7 @@ def create_tts_service(voice: VoiceConfig, keys: dict[str, str | None] | None = 
         return CartesiaTTSService(
             api_key=api_key,
             voice_id=_cartesia_voice_id(voice.tts_voice),
-            model=voice.tts_model or "sonic-3.5",
+            model=_cartesia_model(voice.tts_model),
         )
 
     if provider == "openai":
