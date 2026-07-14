@@ -72,11 +72,11 @@ def _default_dispatch(call_id: str) -> DispatchRequest:
                 },
                 "persona": {
                     "systemPrompt": (
-                        "You are Vaani, a warm, concise voice receptionist for Bright Smile "
-                        "Dental. Keep replies to one or two short sentences."
+                        "You are Vaani, a warm, concise voice receptionist for Acme Support. "
+                        "Keep replies to one or two short sentences."
                     ),
                     "agentSpeaksFirst": True,
-                    "greetingMessage": "Hi, this is Vaani at Bright Smile Dental. How can I help you today?",
+                    "greetingMessage": "Hi, this is Vaani at Acme Support. How can I help you today?",
                 },
             },
             "variables": {},

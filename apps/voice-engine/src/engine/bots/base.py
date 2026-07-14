@@ -42,14 +42,24 @@ from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.turns.user_mute import AlwaysUserMuteStrategy, FirstSpeechUserMuteStrategy
 from pipecat.workers.runner import WorkerRunner
 
+from engine.config import settings
 from engine.contract import (
     BackgroundNoise,
     CallMetrics,
     DispatchRequest,
     EndOfCallReport,
+    LlmUsage,
+    PostCallAnalysis,
+    QaResult,
+    QaTag,
+    SttUsage,
     TranscriptEntry,
+    TtsUsage,
+    Usage,
 )
+from engine.metrics import CallMetricsObserver
 from engine.services.llm import create_llm_service
+from engine.services.qa_analyzer import analyze as analyze_call
 from engine.services.stt import create_stt_service
 from engine.services.tts import create_tts_service
 from engine.tools import register_tools
@@ -170,11 +180,16 @@ async def run_simple_bot(
     # (cancel_on_idle_timeout=False) so we can speak a goodbye before ending.
     inactivity_secs = adv.inactivity_timeout_secs if adv.inactivity_timeout_secs > 0 else None
 
+    # Collects token/character/second usage, interruptions and voice-to-voice
+    # latency off the frame stream for the end-of-call report.
+    metrics_observer = CallMetricsObserver()
+
     worker = PipelineWorker(
         pipeline,
         conversation_id=dispatch.call_id,
         idle_timeout_secs=inactivity_secs,
         cancel_on_idle_timeout=False,
+        observers=[metrics_observer],
         params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
     )
     runner = WorkerRunner(handle_sigint=False)
@@ -253,6 +268,46 @@ async def run_simple_bot(
             max_duration_task.cancel()
         ended_at = int(time.time() * 1000)
         transcript = _extract_transcript(context, started_at)
+        turns = len([t for t in transcript if t.role == "agent"])
+
+        metrics_observer.log_summary(dispatch.call_id)
+
+        # Metrics: real voice-to-voice latency percentiles + interruptions + turns.
+        metrics = CallMetrics(
+            voice_to_voice_p50_ms=metrics_observer.voice_to_voice_p50_ms(),
+            voice_to_voice_p95_ms=metrics_observer.voice_to_voice_p95_ms(),
+            interruptions=metrics_observer.interruptions,
+            turns=turns,
+        )
+
+        # Usage: raw counts only — pricing is the platform API's job.
+        usage = _build_usage(cfg.voice, metrics_observer)
+
+        # Post-call intelligence: advisory, fail-open. Only when we have a
+        # transcript AND an OpenAI key. Never blocks report delivery.
+        analysis: PostCallAnalysis | None = None
+        qa: QaResult | None = None
+        if transcript and settings.openai_api_key:
+            try:
+                result = await analyze_call(
+                    transcript=[
+                        {"role": t.role, "text": t.text, "seconds_from_start": None}
+                        for t in transcript
+                    ],
+                    metrics={
+                        "turns": turns,
+                        "interruptions": metrics_observer.interruptions,
+                        "voiceToVoiceP50Ms": metrics.voice_to_voice_p50_ms,
+                    },
+                    openai_api_key=settings.openai_api_key,
+                    structured_schema=_structured_schema(dispatch),
+                )
+                analysis, qa = _shape_analysis(result)
+            except Exception:
+                # analyze_call is fail-open, but guard anyway: analysis must
+                # never stop the mandatory report from being delivered.
+                logger.exception(f"[call {dispatch.call_id}] post-call analysis crashed")
+
         report = EndOfCallReport(
             call_id=dispatch.call_id,
             status=status,  # type: ignore[arg-type]
@@ -260,13 +315,94 @@ async def run_simple_bot(
             ended_at=ended_at,
             duration_secs=round((ended_at - started_at) / 1000, 2),
             transcript=transcript,
-            metrics=CallMetrics(turns=len([t for t in transcript if t.role == "agent"])),
+            metrics=metrics,
+            usage=usage,
+            analysis=analysis,
+            qa=qa,
             error=error,
         )
         try:
             await report_sink(report)
         except Exception:
             logger.exception(f"[call {dispatch.call_id}] failed to deliver end-of-call report")
+
+
+def _build_usage(voice, observer: CallMetricsObserver) -> Usage:
+    """Assemble raw provider usage from config (provider/model) + observed counts.
+
+    Model names prefer what the service actually reported at runtime, falling
+    back to the configured model. No pricing is computed here.
+    """
+    return Usage(
+        stt=SttUsage(
+            provider=voice.stt_provider,
+            model=voice.stt_model or "",
+            seconds=round(observer.stt_seconds, 2),
+        ),
+        llm=LlmUsage(
+            provider=voice.llm_provider,
+            model=observer.llm_model or voice.llm_model or "",
+            input_tokens=observer.llm_input_tokens,
+            cached_input_tokens=observer.llm_cached_input_tokens,
+            output_tokens=observer.llm_output_tokens,
+        ),
+        tts=TtsUsage(
+            provider=voice.tts_provider,
+            model=observer.tts_model or voice.tts_model or "",
+            characters=observer.tts_characters,
+        ),
+    )
+
+
+def _structured_schema(dispatch: DispatchRequest) -> list[dict] | None:
+    """Best-effort extraction schema from dispatch metadata (optional).
+
+    The transport contract carries no dedicated field, so we accept a
+    ``postCallAnalysis`` bag in ``metadata`` — either a list of field specs or
+    an object exposing ``schema``/``properties``. Absent or malformed → None.
+    """
+    md = dispatch.metadata or {}
+    pca = md.get("postCallAnalysis") or md.get("post_call_analysis")
+    if isinstance(pca, list):
+        return pca or None
+    if isinstance(pca, dict):
+        schema = pca.get("schema") or pca.get("properties")
+        return schema if isinstance(schema, list) and schema else None
+    return None
+
+
+def _shape_analysis(result: dict) -> tuple[PostCallAnalysis | None, QaResult | None]:
+    """Map the analyzer's dict into the report's PostCallAnalysis + QaResult.
+
+    QaResult is only built when the model returned a usable quality score, since
+    the contract requires score/sentiment/summary to be present.
+    """
+    if not result:
+        return None, None
+
+    analysis: PostCallAnalysis | None = None
+    if result.get("summary") or result.get("sentiment") or result.get("structured_data"):
+        analysis = PostCallAnalysis(
+            summary=result.get("summary"),
+            sentiment=result.get("sentiment"),
+            structured_data=result.get("structured_data"),
+        )
+
+    qa: QaResult | None = None
+    qa_in = result.get("qa") or {}
+    score = qa_in.get("call_quality_score")
+    if score is not None:
+        qa = QaResult(
+            call_quality_score=score,
+            overall_sentiment=qa_in.get("overall_sentiment") or result.get("sentiment") or "neutral",
+            summary=qa_in.get("summary") or result.get("summary") or "",
+            tags=[
+                QaTag(tag=t["tag"], evidence=t.get("evidence") or None)
+                for t in qa_in.get("tags", [])
+                if isinstance(t, dict) and t.get("tag")
+            ],
+        )
+    return analysis, qa
 
 
 def _extract_transcript(context: LLMContext, base_ts: int) -> list[TranscriptEntry]:
