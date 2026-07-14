@@ -9,21 +9,22 @@ export function Topbar() {
   const [open, setOpen] = React.useState(false);
 
   return (
-    <header className="flex items-center justify-between gap-4 px-8 pt-6 pb-2">
+    <header className="flex items-center justify-between gap-3 px-4 pt-5 pb-2 sm:px-6 md:gap-4 md:px-8 md:pt-6">
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex h-10 w-full max-w-[340px] items-center gap-2.5 rounded-full border-[1.5px] border-border bg-paper px-4 text-[13px] text-muted-foreground transition-colors hover:border-ink"
+        className="ml-13 flex h-11 w-full max-w-[340px] items-center gap-2.5 rounded-full border-[1.5px] border-border bg-paper px-4 text-[13px] text-muted-foreground transition-colors hover:border-ink md:ml-0 md:h-10"
       >
         <Search className="size-3.5" />
-        Search agents, calls, campaigns…
+        <span className="hidden sm:inline">Search agents, calls, campaigns…</span>
+        <span className="sm:hidden">Search…</span>
         <kbd className="ml-auto rounded-md border border-border bg-sand px-1.5 py-0.5 font-display text-[10px] font-bold tracking-wide">
           ⌘K
         </kbd>
       </button>
 
       <div className="flex items-center gap-3">
-        <Link href="/history" className="sticker text-[10px]">
+        <Link href="/history" className="sticker hidden text-[10px] sm:inline-flex">
           <span className="pulse-dot pulse-dot-live" />
           2 live calls
         </Link>
