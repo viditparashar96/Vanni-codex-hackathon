@@ -23,7 +23,6 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from loguru import logger
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
-from pipecat_ai_small_webrtc_prebuilt.frontend import SmallWebRTCPrebuiltUI
 
 from engine.bots.base import run_simple_bot
 from engine.config import settings
@@ -159,14 +158,10 @@ async def dev_report_sink(report: dict):
     return JSONResponse({"received": True})
 
 
-@app.get("/custom")
-async def custom_console():
-    """Fallback hand-rolled test page (the prebuilt UI at / is preferred)."""
+@app.get("/")
+async def index():
+    """Browser test console (hand-rolled SmallWebRTC client)."""
     return FileResponse(_STATIC / "index.html")
-
-
-# ── Static mount LAST: serves the prebuilt WebRTC UI at / (catches unmatched paths) ──
-app.mount("/", SmallWebRTCPrebuiltUI)
 
 
 def main():
