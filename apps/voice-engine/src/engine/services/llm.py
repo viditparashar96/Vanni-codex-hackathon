@@ -18,7 +18,18 @@ def create_llm_service(voice: VoiceConfig, keys: dict[str, str | None] | None = 
         api_key = keys.get("openai") or settings.openai_api_key
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY missing (no org key, no platform default).")
-        return OpenAILLMService(api_key=api_key, model=voice.llm_model or "gpt-4.1-mini")
+        model = voice.llm_model or "gpt-4.1-mini"
+        # Reasoning-family models (gpt-5*/o*) default reasoning_effort to a
+        # non-none value, which /v1/chat/completions rejects when function
+        # tools are attached (400). Voice needs instant turns, so pin it off.
+        extra: dict[str, str] = {}
+        if model.startswith(("gpt-5", "o1", "o3", "o4")):
+            extra["reasoning_effort"] = "none"
+        return OpenAILLMService(
+            api_key=api_key,
+            model=model,
+            settings=OpenAILLMService.Settings(extra=extra),
+        )
 
     if provider == "groq":
         from pipecat.services.groq.llm import GroqLLMService
