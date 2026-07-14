@@ -29,7 +29,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       {/* visual side — three bands */}
       <aside className="relative hidden overflow-hidden lg:block" aria-hidden>
         <div className="absolute inset-0 grid grid-cols-3">
-          <div className="relative bg-lime">
+          <div className="band-sway relative bg-lime">
             <span className="eyebrow absolute top-7 left-7 text-[10px] text-ink/70">Build</span>
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-90 font-display text-[clamp(44px,5.5vw,80px)] font-black tracking-[-0.04em] whitespace-nowrap text-ink/80 mix-blend-multiply">
               Design · Test
@@ -39,7 +39,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               <small className="eyebrow mt-1.5 block text-[9px] opacity-70">idea → live call</small>
             </div>
           </div>
-          <div className="relative bg-brand-yellow">
+          <div className="band-sway relative bg-brand-yellow">
             <span className="eyebrow absolute top-7 left-7 text-[10px] text-ink/70">Connect</span>
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-90 font-display text-[clamp(44px,5.5vw,80px)] font-black tracking-[-0.04em] whitespace-nowrap text-ink/80 mix-blend-multiply">
               Phone · Web
@@ -48,7 +48,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               7<small className="eyebrow mt-1.5 block text-[9px] opacity-70">carriers, one plane</small>
             </div>
           </div>
-          <div className="relative bg-brand-orange">
+          <div className="band-sway relative bg-brand-orange">
             <span className="eyebrow absolute top-7 left-7 text-[10px] text-paper/85">Operate</span>
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-90 font-display text-[clamp(44px,5.5vw,80px)] font-black tracking-[-0.04em] whitespace-nowrap text-paper/90">
               Live · At scale
@@ -61,12 +61,20 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </div>
 
         {/* stickers */}
-        <div className="sticker absolute top-[12%] left-[8%] -rotate-6">Every call reported</div>
-        <div className="sticker absolute top-[20%] right-[9%] rotate-[8deg] !bg-forest !text-paper">2 live now</div>
-        <div className="sticker absolute bottom-[22%] left-[12%] -rotate-3">QA 8.6 / 10</div>
+        <div className="sticker sticker-float absolute top-[12%] left-[8%]" style={{ "--rot": "-6deg" } as React.CSSProperties}>Every call reported</div>
+        <div className="sticker sticker-float absolute top-[20%] right-[9%] !bg-forest !text-paper" style={{ "--rot": "8deg" } as React.CSSProperties}>2 live now</div>
+        <div className="sticker sticker-float absolute bottom-[22%] left-[12%]" style={{ "--rot": "-3deg" } as React.CSSProperties}>QA 8.6 / 10</div>
+
+        {/* orbiting dots */}
+        <div className="orbit-ring">
+          <span className="orbit-dot bg-lime" style={{ top: "-7px", left: "50%" }} />
+          <span className="orbit-dot bg-brand-yellow" style={{ top: "50%", right: "-7px" }} />
+          <span className="orbit-dot bg-brand-orange" style={{ bottom: "-7px", left: "38%" }} />
+          <span className="orbit-dot bg-paper" style={{ top: "26%", left: "-5px" }} />
+        </div>
 
         {/* floating card */}
-        <div className="absolute top-1/2 left-1/2 w-[56%] max-w-[350px] -translate-x-1/2 -translate-y-1/2 rounded-3xl border-[1.5px] border-ink bg-paper p-5 shadow-[8px_12px_0_var(--ink)]">
+        <div className="card-drift absolute top-1/2 left-1/2 z-[3] w-[56%] max-w-[350px] -translate-x-1/2 -translate-y-1/2 rounded-3xl border-[1.5px] border-ink bg-paper p-5 shadow-[8px_12px_0_var(--ink)]">
           <div className="eyebrow mb-3 flex items-center gap-2 text-[9px] text-muted-foreground">
             <span className="pulse-dot pulse-dot-live" />
             Live transcript

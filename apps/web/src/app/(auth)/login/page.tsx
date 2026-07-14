@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Check, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -12,11 +12,23 @@ export default function LoginPage() {
   const [showPw, setShowPw] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSubmitting(true);
-    setTimeout(() => router.push("/"), 900);
+    setTimeout(() => router.push("/"), 1400);
   };
+
+  if (submitting) {
+    return (
+      <div className="rise-in" aria-live="polite">
+        <span className="pop-in flex size-16 items-center justify-center rounded-full border-[1.5px] border-ink bg-lime text-forest shadow-[4px_4px_0_var(--ink)]">
+          <Check className="size-7 stroke-[2.5]" />
+        </span>
+        <h1 className="display mt-7 text-[clamp(34px,4vw,48px)] text-ink">Welcome back.</h1>
+        <p className="mt-2.5 text-[15px] text-muted-foreground">Loading your dashboard…</p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -80,10 +92,9 @@ export default function LoginPage() {
 
         <button
           type="submit"
-          disabled={submitting}
-          className="group flex h-14 w-full items-center justify-center gap-2.5 rounded-full bg-ink font-display text-[13px] font-extrabold tracking-[0.12em] text-paper uppercase transition-all hover:-translate-y-0.5 disabled:opacity-70"
+          className="group flex h-14 w-full items-center justify-center gap-2.5 rounded-full bg-ink font-display text-[13px] font-extrabold tracking-[0.12em] text-paper uppercase transition-all hover:-translate-y-0.5"
         >
-          {submitting ? "Signing in…" : "Log in"}
+          Log in
           <span className="flex size-7 items-center justify-center rounded-full bg-lime text-forest transition-transform group-hover:translate-x-0.5">
             <ArrowRight className="size-3.5 stroke-[2.5]" />
           </span>
