@@ -27,7 +27,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 const url = process.env.VAANI_MCP_URL ?? "https://vaani.voxavoice.app/api/mcp";
 const apiKey = process.env.VAANI_API_KEY;
 
