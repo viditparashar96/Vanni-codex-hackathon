@@ -106,6 +106,9 @@ function serializeAgent(
     systemPrompt: pc.systemPrompt,
     greetingMessage: pc.greetingMessage,
     agentSpeaksFirst: pc.agentSpeaksFirst,
+    // Flow-agent graph (null for simple agents / when unset), so the flow
+    // designer can hydrate the canvas straight from the agent read.
+    flowConfig: (version?.flowConfig ?? null) as Record<string, unknown> | null,
   };
 }
 
