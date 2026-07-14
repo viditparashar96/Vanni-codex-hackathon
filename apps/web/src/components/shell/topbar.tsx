@@ -2,13 +2,36 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, LogOut, Settings as SettingsIcon } from "lucide-react";
+import { toast } from "sonner";
 import { CommandPalette } from "@/components/shell/command-palette";
+import { signOut } from "@/lib/auth-client";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import type { SessionSummary } from "@/lib/server-api";
 
 export function Topbar({ summary }: { summary?: SessionSummary }) {
   const [open, setOpen] = React.useState(false);
+  const router = useRouter();
   const initials = summary?.user?.initials ?? "··";
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch {
+      /* ignore — clear client state and route to login regardless */
+    }
+    toast.success("Signed out");
+    router.push("/login");
+    router.refresh();
+  };
 
   return (
     <header className="flex items-center justify-between gap-3 px-4 pt-5 pb-2 sm:px-6 md:gap-4 md:px-8 md:pt-6">
@@ -26,13 +49,37 @@ export function Topbar({ summary }: { summary?: SessionSummary }) {
       </button>
 
       <div className="flex items-center gap-3">
-        <Link
-          href="/settings/general"
-          className="flex size-9 items-center justify-center rounded-full border-[1.5px] border-ink bg-brand-yellow font-display text-[12px] font-black text-ink shadow-[2px_2px_0_var(--ink)] transition-transform hover:-translate-y-0.5"
-          aria-label="Your profile"
-        >
-          {initials}
-        </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="flex size-9 items-center justify-center rounded-full border-[1.5px] border-ink bg-brand-yellow font-display text-[12px] font-black text-ink shadow-[2px_2px_0_var(--ink)] transition-transform hover:-translate-y-0.5 focus:outline-none"
+            aria-label="Account menu"
+          >
+            {initials}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            {summary?.user && (
+              <>
+                <DropdownMenuLabel className="truncate">
+                  <div className="text-[13px] font-semibold text-ink">{summary.user.name}</div>
+                  <div className="truncate text-[11px] font-normal text-muted-foreground">
+                    {summary.user.email}
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            <DropdownMenuItem asChild>
+              <Link href="/settings/general">
+                <SettingsIcon className="size-4" />
+                Settings
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleSignOut} className="text-red-600 focus:text-red-600">
+              <LogOut className="size-4" />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <CommandPalette open={open} onOpenChange={setOpen} />
