@@ -1,0 +1,47 @@
+{
+  "name": "vaani-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for the Vaani voice-AI platform — build, publish and test voice agents from Claude, Cursor, or any MCP client.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "vaani-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "voice",
+    "voice-agent",
+    "ai",
+    "vaani"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/viditparashar96/Vanni-codex-hackathon.git",
+    "directory": "packages/mcp"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.21.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
