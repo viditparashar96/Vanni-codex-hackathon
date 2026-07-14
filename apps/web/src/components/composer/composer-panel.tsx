@@ -35,8 +35,8 @@ export function ComposerPanel() {
             className="flex min-h-48 items-center gap-3 rounded-l-2xl border-[1.5px] border-r-0 border-ink bg-lime py-6 pr-2.5 pl-3.5 shadow-[-3px_3px_0_var(--ink)] transition-transform duration-200 group-hover:-translate-x-1"
             style={{ writingMode: "vertical-rl" }}
           >
-            <Sparkles className="size-5 rotate-90 text-forest" />
-            <span className="font-display text-[12px] font-extrabold tracking-[0.2em] text-forest uppercase">
+            <Sparkles className="size-5 rotate-90 text-forest mt-6" />
+            <span className="font-display text-[15px]  font-extrabold tracking-[0.2em] text-forest uppercase">
               Composer
             </span>
           </span>
