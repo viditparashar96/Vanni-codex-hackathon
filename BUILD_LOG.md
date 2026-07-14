@@ -45,7 +45,13 @@
 | **3 — Close the loop** | Config resolution (DB→dispatch payload), calls persistence, realtime feedback events (dual sink WS+DB) | 🟡 **Partial** — config-resolver + dispatch + calls persistence + /api/internal report&events endpoints done. Live WS event stream pending |
 | **3b — API↔frontend contract** | API serves the exact shapes `apps/web/src/types/index.ts` expects; auto-org on signup | ✅ **DONE + VERIFIED** — bare Agent[]/Call[], AnalyticsSummary, OrgCredits{balance,burnLast7d}; signup auto-creates org+owner+credits; requireOrg authorizes by membership (race-free, multi-org). Verified over HTTP. |
 | **4a — Frontend wiring** | Real auth, org context, mutations, live test console (WebRTC→engine), real data across chrome | ✅ **DONE + BROWSER-VERIFIED** — signup→auto-org+$2→real dashboard→create agent→test call connects & bot speaks; sidebar/topbar/overview show real org/user/credits; call history shows real completed calls. Fixes: raw-cookie forwarding, client/server split, CORS on engine, Cartesia voice/model guards, form voice→provider mapping |
-| **4b — Simple agent completeness** | Tool calling + end_call + advancedConfig behaviors (engine) | 🟡 tools.py + base.py landed & import clean; gap analysis in progress to confirm parity |
+| **4b — Simple agent completeness** | Tool calling + end_call + advancedConfig behaviors (engine) | 🟡 tools + greeting/goodbye/VAD/barge-in/timeouts done; multi-provider wired (LLM openai/groq/anthropic/google, STT deepgram/openai/assemblyai/azure, TTS cartesia/openai/elevenlabs) |
+
+### Simple-agent gap vs reference (non-telephony) — remaining work
+- ❌ **Provider catalogs + icons**: no llm/stt/tts/voice/realtime catalogs, no brand icons, no voice previews; new-agent + agent-builder dropdowns hardcoded & inconsistent → port catalogs + provider-icon, wire both forms
+- ❌ **Agent-builder persistence**: only ~4 fields save; prompt/greeting/model/voice/advanced/tools/KB edits discarded → make fully controlled + persist all tabs
+- ❌ **Post-call intelligence**: engine EndOfCallReport leaves usage/analysis/qa/recording empty → compute cost/usage + summary/QA/structured-data; then history/analytics off mock
+- 🟡 **advanced behaviors**: missing RAG (Qdrant), recording→blob, thinking sounds, screen-aware
 | **4 — Simple agent real** | Full advancedConfig (VAD, barge-in, greeting, variables), HTTP tools + end_call, KB (Qdrant RAG), post-call (summary + structured extraction + QA) | ⬜ |
 | **5 — Flow agents** | Dynamic-flows runtime (behind adapter), node types + transitions, flow validation | ⬜ (scope finish line) |
 | 6 — Telephony (stretch) | LiveKit SIP, Twilio+Plivo, inbound routing, outbound, transfer/DTMF/SMS | ⬜ deferred |
