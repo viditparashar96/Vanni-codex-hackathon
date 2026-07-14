@@ -4,13 +4,11 @@ version = "0.1.0"
 description = "Vaani voice pipeline service — one Pipecat pipeline per call"
 requires-python = ">=3.12"
 dependencies = [
-    # Pipecat core + provider extras. Flows stays a SEPARATE package (see below);
-    # we do not assume it was merged into core. Pin verified against the local hub.
-    "pipecat-ai[deepgram,openai,groq,anthropic,google,assemblyai,elevenlabs,azure,cartesia,silero,webrtc]>=1.1.0,<2.0.0",
+    # Pipecat core + provider extras. As of 1.5.0 Pipecat Flows ships INSIDE core
+    # (import `pipecat.flows`) — the standalone `pipecat-ai-flows` package is no
+    # longer needed and conflicts, so it is intentionally NOT a dependency.
+    "pipecat-ai[deepgram,openai,groq,anthropic,google,assemblyai,elevenlabs,azure,cartesia,silero,webrtc]>=1.5.0,<2.0.0",
     "pipecat-ai-small-webrtc-prebuilt>=0.0.4",
-    # Flows: imported as `pipecat_flows`. Wrapped behind engine/flows adapter so a
-    # future core-merge is a one-file change.
-    "pipecat-ai-flows>=1.1.0,<2.0.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
     "pydantic>=2.9.0",
