@@ -41,12 +41,16 @@ claude mcp add vaani -e VAANI_API_KEY=vaa_… -- npx -y vaani-mcp
 
 ## Tools
 
-`list_agents` · `get_agent` · `create_agent` · `update_agent` · `publish_agent` · `start_test_call` · `list_calls` · `get_call` · `get_analytics_summary` · `get_credit_balance`
+`list_agents` · `get_agent` · `create_agent` · `create_flow_agent` · `validate_flow` · `update_agent` · `publish_agent` · `start_test_call` · `list_calls` · `get_call` · `get_analytics_summary` · `get_credit_balance`
 
-The bridge mirrors whatever the platform exposes, so new server tools appear automatically.
+Flow agents are multi-stage conversation graphs (verify → branch → transfer/SMS → end); `validate_flow` returns the platform's exact error list so your client can iterate before creating. The bridge mirrors whatever the platform exposes, so new server tools appear automatically.
 
 ## Try it
 
 > "Create a voice agent called *Dental Front Desk* that books cleanings, speaks first with a warm greeting — publish it and start a test call."
 
-Your MCP client chains `create_agent → publish_agent → start_test_call` and returns a browser URL you can open and talk to.
+Or a multi-stage one:
+
+> "Build a flow agent that verifies the caller's date of birth, then confirms or reschedules their recall appointment, then wraps up — validate the graph first, then publish it."
+
+Your MCP client chains the tools and returns a browser URL you can open and talk to.

@@ -1,6 +1,6 @@
 {
   "name": "vaani-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MCP server for the Vaani voice-AI platform — build, publish and test voice agents from Claude, Cursor, or any MCP client.",
   "license": "MIT",
   "type": "module",
