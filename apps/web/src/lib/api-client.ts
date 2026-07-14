@@ -82,6 +82,8 @@ export interface CreateAgentPayload {
   greetingMessage?: string;
   agentSpeaksFirst?: boolean;
   voice?: VoiceConfig;
+  /** Flow-agent starter graph (validated server-side). Stored as version 1. */
+  flowConfig?: Record<string, unknown>;
 }
 
 /** Metadata-only patch (name / description / tags / status). */
@@ -196,7 +198,9 @@ export interface TestSession {
 
 /** Browser-side mutation methods. Import this from Client Components. */
 export const api = {
-  createAgent: (payload: CreateAgentPayload) => mutate<Agent>("/agents", "POST", payload),
+  createAgent: ({ flowConfig, ...payload }: CreateAgentPayload) =>
+    // The API reads a flow graph from `version.flowConfig`; nest it there.
+    mutate<Agent>("/agents", "POST", flowConfig ? { ...payload, version: { flowConfig } } : payload),
   /** Patch agent metadata (name / description / tags / status). */
   updateAgentMetadata: (id: string, patch: UpdateAgentMetadata) =>
     mutate<Agent>(`/agents/${id}`, "PATCH", patch),

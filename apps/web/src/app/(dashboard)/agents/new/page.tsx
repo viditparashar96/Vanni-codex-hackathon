@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ProviderIcon } from "@/components/shared/provider-icon";
+import { instantiateTemplate } from "@/lib/flow-templates";
 import { LLM_PROVIDER_GROUPS, DEFAULT_LLM_MODEL } from "@/lib/llm-catalog";
 import { STT_PROVIDER_GROUPS, DEFAULT_STT_MODEL } from "@/lib/stt-catalog";
 import { TTS_PROVIDER_GROUPS, DEFAULT_TTS_PROVIDER } from "@/lib/tts-catalog";
@@ -30,11 +31,44 @@ import {
   DEFAULT_LANGUAGE,
 } from "@/lib/voice-catalog";
 
-const TEMPLATES = [
-  { name: "Appointment reminder", desc: "Confirm, reschedule or cancel — with SMS follow-up.", type: "flow" },
-  { name: "Reception / front desk", desc: "Answer the main line, book visits, transfer to humans.", type: "simple" },
-  { name: "Lead qualifier", desc: "Qualify inbound web leads and book a meeting.", type: "flow" },
-  { name: "Survey", desc: "Short NPS or CSAT survey with structured extraction.", type: "simple" },
+type Template = {
+  name: string;
+  desc: string;
+  type: "flow" | "simple";
+  flowTemplateId?: string; // flow: which graph from flow-templates
+  systemPrompt?: string; // simple: starter prompt
+  greetingMessage?: string;
+};
+
+const TEMPLATES: Template[] = [
+  {
+    name: "Appointment booking",
+    desc: "Collect details, check a time, confirm the booking.",
+    type: "flow",
+    flowTemplateId: "appointment-booking",
+  },
+  {
+    name: "Reception / front desk",
+    desc: "Answer the main line, take a message, route the caller.",
+    type: "simple",
+    systemPrompt:
+      "You are the front-desk receptionist for {{businessName}}. Greet callers warmly, find out how you can help, answer common questions, and take a clear message or route them to the right person. Keep replies to one or two short sentences.",
+    greetingMessage: "Thanks for calling — how can I help you today?",
+  },
+  {
+    name: "Lead qualifier",
+    desc: "Qualify inbound leads and book a follow-up.",
+    type: "flow",
+    flowTemplateId: "lead-qualification",
+  },
+  {
+    name: "Survey",
+    desc: "Short satisfaction survey with a wrap-up.",
+    type: "simple",
+    systemPrompt:
+      "You are a friendly survey agent. Ask the caller to rate their recent experience from 1 to 10, then ask one short follow-up about why. Acknowledge their answers, keep it brief, and thank them at the end.",
+    greetingMessage: "Hi! Do you have a moment for a quick two-question survey?",
+  },
 ];
 
 function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
@@ -178,6 +212,49 @@ export default function NewAgentPage() {
 
   const [creating, setCreating] = React.useState(false);
   const [creatingFlow, setCreatingFlow] = React.useState(false);
+  const [templateBusy, setTemplateBusy] = React.useState<string | null>(null);
+
+  // Create a real agent from a starter template and open the right editor:
+  // flow templates carry a validated graph → open the canvas; simple templates
+  // carry a starter prompt → open the builder.
+  const createFromTemplate = async (t: Template) => {
+    if (templateBusy) return;
+    setTemplateBusy(t.name);
+    try {
+      if (t.type === "flow") {
+        const flowConfig = t.flowTemplateId ? instantiateTemplate(t.flowTemplateId) : undefined;
+        const created = await api.createAgent({
+          name: t.name,
+          description: t.desc,
+          type: "flow",
+          flowConfig: flowConfig as unknown as Record<string, unknown> | undefined,
+        });
+        router.push(`/agents/${created.id}/flow`);
+      } else {
+        const created = await api.createAgent({
+          name: t.name,
+          description: t.desc,
+          type: "simple",
+          systemPrompt: t.systemPrompt,
+          greetingMessage: t.greetingMessage,
+          agentSpeaksFirst: true,
+          voice: {
+            llm: DEFAULT_LLM_MODEL,
+            stt: DEFAULT_STT_MODEL,
+            tts: DEFAULT_TTS_PROVIDER,
+            voice: DEFAULT_VOICE_ID,
+            language: DEFAULT_LANGUAGE,
+          },
+        });
+        router.push(`/agents/${created.id}`);
+      }
+    } catch (err) {
+      toast.error(`Couldn’t create “${t.name}”`, {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+      setTemplateBusy(null);
+    }
+  };
 
   // Create a flow agent and open the visual designer. The designer seeds a
   // starter graph when the new agent has no flowConfig yet; the user edits it
@@ -381,10 +458,12 @@ export default function NewAgentPage() {
         <h2 className="eyebrow mb-4 text-ink">Start from a template</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           {TEMPLATES.map((t) => (
-            <Link
+            <button
               key={t.name}
-              href={t.type === "flow" ? "/agents/agt_reminder/flow" : "/agents/agt_frontdesk"}
-              className="group flex items-center gap-4 rounded-2xl border-[1.5px] border-border bg-paper p-4.5 transition-all hover:-translate-y-0.5 hover:border-ink"
+              type="button"
+              onClick={() => createFromTemplate(t)}
+              disabled={templateBusy !== null}
+              className="group flex items-center gap-4 rounded-2xl border-[1.5px] border-border bg-paper p-4.5 text-left transition-all hover:-translate-y-0.5 hover:border-ink disabled:opacity-60"
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -393,8 +472,12 @@ export default function NewAgentPage() {
                 </div>
                 <div className="mt-0.5 truncate text-[12px] text-muted-foreground">{t.desc}</div>
               </div>
-              <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-            </Link>
+              {templateBusy === t.name ? (
+                <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+              ) : (
+                <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              )}
+            </button>
           ))}
         </div>
       </section>
