@@ -177,6 +177,26 @@ export default function NewAgentPage() {
   const [language, setLanguage] = React.useState(DEFAULT_LANGUAGE);
 
   const [creating, setCreating] = React.useState(false);
+  const [creatingFlow, setCreatingFlow] = React.useState(false);
+
+  // Create a flow agent and open the visual designer. The designer seeds a
+  // starter graph when the new agent has no flowConfig yet; the user edits it
+  // on the canvas and hits Save Flow to persist a version.
+  const createFlow = async (agentName: string) => {
+    setCreatingFlow(true);
+    try {
+      const created = await api.createAgent({
+        name: agentName,
+        type: "flow",
+      });
+      router.push(`/agents/${created.id}/flow`);
+    } catch (err) {
+      toast.error("Couldn’t create the flow agent", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+      setCreatingFlow(false);
+    }
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -319,13 +339,15 @@ export default function NewAgentPage() {
         </div>
       </form>
 
-      {/* flow — links out to the canvas */}
-      <Link
-        href="/agents/agt_reminder/flow"
-        className="group rise-in rise-in-2 relative mt-5 flex items-center gap-5 overflow-hidden rounded-3xl border-[1.5px] border-ink bg-forest p-7 text-paper shadow-[5px_5px_0_var(--ink)] transition-transform hover:-translate-y-1"
+      {/* flow — creates a flow agent then opens the canvas */}
+      <button
+        type="button"
+        onClick={() => createFlow(name.trim() || "Untitled Flow")}
+        disabled={creatingFlow}
+        className="group rise-in rise-in-2 relative mt-5 flex w-full items-center gap-5 overflow-hidden rounded-3xl border-[1.5px] border-ink bg-forest p-7 text-left text-paper shadow-[5px_5px_0_var(--ink)] transition-transform hover:-translate-y-1 disabled:opacity-60"
       >
         <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl border-[1.5px] border-lime/50 bg-forest-soft">
-          <Waypoints className="size-6 text-lime" />
+          {creatingFlow ? <Loader2 className="size-6 animate-spin text-lime" /> : <Waypoints className="size-6 text-lime" />}
         </div>
         <div className="min-w-0 flex-1">
           <h2 className="display text-[22px] text-paper">Flow agent</h2>
@@ -334,10 +356,10 @@ export default function NewAgentPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 font-display text-[11.5px] font-extrabold tracking-[0.12em] text-lime uppercase">
-          Open the canvas
+          {creatingFlow ? "Creating…" : "Open the canvas"}
           <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
         </div>
-      </Link>
+      </button>
 
       {/* composer plug */}
       <Link
