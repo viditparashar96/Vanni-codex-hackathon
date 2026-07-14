@@ -1,17 +1,23 @@
 # vaani-mcp
 
-Build, publish and test **voice agents** on a [Vaani](https://github.com/viditparashar96/Vanni-codex-hackathon) platform — from Claude, Cursor, or any MCP client.
+Build, publish and test **voice agents** on [Vaani](https://vaani.voxavoice.app) — from Claude, Cursor, or any MCP client.
 
 ```bash
 npx vaani-mcp
 ```
 
-## Configuration
+## Setup
+
+1. Sign up at **https://vaani.voxavoice.app**
+2. **Settings → API Keys → Create key** — copy the `vaa_…` key (shown once)
+3. Add the server to your MCP client with `VAANI_API_KEY`
 
 | Env | Meaning | Default |
 | --- | --- | --- |
-| `VAANI_MCP_URL` | Your Vaani platform's MCP endpoint | `http://localhost:4000/api/mcp` |
-| `VAANI_API_KEY` | Bearer key set as `MCP_API_KEY` on the platform | — |
+| `VAANI_API_KEY` | Your workspace key from Settings → API Keys | — |
+| `VAANI_MCP_URL` | Platform MCP endpoint | `https://vaani.voxavoice.app/api/mcp` |
+
+Point `VAANI_MCP_URL` at `http://localhost:4000/api/mcp` for a local Vaani stack.
 
 ## Claude Desktop
 
@@ -21,10 +27,7 @@ npx vaani-mcp
     "vaani": {
       "command": "npx",
       "args": ["-y", "vaani-mcp"],
-      "env": {
-        "VAANI_MCP_URL": "https://your-vaani-host/api/mcp",
-        "VAANI_API_KEY": "vaa_mcp_…"
-      }
+      "env": { "VAANI_API_KEY": "vaa_…" }
     }
   }
 }
@@ -33,7 +36,7 @@ npx vaani-mcp
 ## Claude Code
 
 ```bash
-claude mcp add vaani -e VAANI_MCP_URL=https://your-vaani-host/api/mcp -e VAANI_API_KEY=vaa_mcp_… -- npx -y vaani-mcp
+claude mcp add vaani -e VAANI_API_KEY=vaa_… -- npx -y vaani-mcp
 ```
 
 ## Tools

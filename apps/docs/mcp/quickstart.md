@@ -8,9 +8,12 @@ the UI instantly.
 ## Endpoint
 
 ```
-POST http://localhost:4000/api/mcp        (Streamable HTTP, stateless)
-Authorization: Bearer <MCP_API_KEY>
+POST https://vaani.voxavoice.app/api/mcp   (Streamable HTTP, stateless)
+Authorization: Bearer <your vaa_… key>
 ```
+
+Local dev: `http://localhost:4000/api/mcp`. Easiest client setup is the npm
+bridge — `npx vaani-mcp` with `VAANI_API_KEY` set (see `packages/mcp`).
 
 ## Get an API key
 

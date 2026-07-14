@@ -8,8 +8,10 @@
  *   npx vaani-mcp
  *
  * Env:
- *   VAANI_MCP_URL  — platform MCP endpoint (default http://localhost:4000/api/mcp)
- *   VAANI_API_KEY  — bearer key configured on the platform (MCP_API_KEY)
+ *   VAANI_API_KEY  — workspace API key (Dashboard → Settings → API Keys)
+ *   VAANI_MCP_URL  — platform MCP endpoint
+ *                    (default https://vaani.voxavoice.app/api/mcp;
+ *                     use http://localhost:4000/api/mcp for local dev)
  *
  * The bridge connects to the endpoint over Streamable HTTP, mirrors its tool
  * list, and forwards every call — so the tool surface always matches the
@@ -25,8 +27,8 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
-const VERSION = "0.1.0";
-const url = process.env.VAANI_MCP_URL ?? "http://localhost:4000/api/mcp";
+const VERSION = "0.2.0";
+const url = process.env.VAANI_MCP_URL ?? "https://vaani.voxavoice.app/api/mcp";
 const apiKey = process.env.VAANI_API_KEY;
 
 async function main(): Promise<void> {
