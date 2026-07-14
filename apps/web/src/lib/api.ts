@@ -117,7 +117,49 @@ export const api = {
   getPhoneNumbers: () => get<PhoneNumber[]>("/telephony/numbers", mockNumbers),
   getMembers: () => get<Member[]>("/members", mockMembers),
   getApiKeys: () => get<ApiKey[]>("/api-keys", mockApiKeys),
-  getLedger: () => get<LedgerEntry[]>("/credits/transactions", mockLedger),
+  getLedger: async (): Promise<LedgerEntry[]> => {
+    const raw = await get<LedgerEntry[] | { transactions: ApiLedgerRow[] }>(
+      "/credits/transactions",
+      mockLedger,
+    );
+    return normalizeLedger(raw);
+  },
   getCredits: () => get<OrgCredits>("/credits", mockCredits),
   getAnalytics: () => get<AnalyticsSummary>("/analytics/summary", mockAnalytics),
 };
+
+/* --------------------------------------------------------------------------
+ * Shape adapters — API rows → client contract
+ * ------------------------------------------------------------------------ */
+
+/** Row shape of GET /credits/transactions (db-flavored, wrapped). */
+interface ApiLedgerRow {
+  id: string;
+  type: string;
+  amount: number;
+  balanceAfter: number;
+  description: string | null;
+  createdAt: string;
+}
+
+/** The backend wraps rows in `{ transactions }` and uses db field names +
+ *  richer type values (`signup_bonus`, …). Fold both into the client contract. */
+function normalizeLedger(
+  raw: LedgerEntry[] | { transactions: ApiLedgerRow[] },
+): LedgerEntry[] {
+  if (Array.isArray(raw)) return raw;
+  if (!raw || !Array.isArray(raw.transactions)) return [];
+  return raw.transactions.map((t) => ({
+    id: t.id,
+    at: t.createdAt,
+    type:
+      t.amount < 0
+        ? "deduction"
+        : t.type === "topup" || t.type === "purchase" || t.type === "deposit"
+          ? "topup"
+          : "grant",
+    amount: t.amount,
+    balanceAfter: t.balanceAfter,
+    memo: t.description ?? t.type.replace(/_/g, " "),
+  }));
+}

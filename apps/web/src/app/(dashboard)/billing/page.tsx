@@ -51,7 +51,7 @@ export default async function BillingPage() {
         </h2>
         <div className="overflow-hidden rounded-2xl border-[1.5px] border-border bg-paper">
           {ledger.map((entry, i) => {
-            const Icon = LEDGER_ICON[entry.type];
+            const Icon = LEDGER_ICON[entry.type] ?? Receipt;
             return (
               <div
                 key={entry.id}
