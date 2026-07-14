@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vaani Voice Engine — Test Console</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: ui-sans-serif, system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.25rem; }
+  .row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: .75rem 0; }
+  button { padding: .55rem 1rem; border-radius: .5rem; border: 1px solid #8884; cursor: pointer; font-weight: 600; }
+  #connect { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  #status { font-weight: 600; }
+  textarea { width: 100%; min-height: 120px; font-family: ui-monospace, monospace; font-size: .85rem; padding: .5rem; border-radius: .5rem; border: 1px solid #8884; }
+  #log { background: #8881; border-radius: .5rem; padding: .5rem .75rem; height: 220px; overflow: auto; font-family: ui-monospace, monospace; font-size: .8rem; white-space: pre-wrap; }
+  label { font-size: .8rem; opacity: .8; }
+  .dot { width: .6rem; height: .6rem; border-radius: 50%; display: inline-block; background: #999; }
+  .dot.on { background: #22c55e; }
+</style>
+</head>
+<body>
+  <h1>Vaani Voice Engine — Test Console</h1>
+  <p style="opacity:.8;font-size:.9rem">Edit the agent config, hit <b>Connect &amp; Talk</b>, allow the mic, and speak. Watch the server logs for the transcript and end-of-call report.</p>
+
+  <label for="config">Agent config (sent to <code>/dispatch</code>)</label>
+  <textarea id="config"></textarea>
+
+  <div class="row">
+    <button id="connect">Connect &amp; Talk</button>
+    <button id="hangup" disabled>Hang up</button>
+    <span class="dot" id="dot"></span>
+    <span id="status">idle</span>
+  </div>
+
+  <audio id="remote" autoplay></audio>
+  <div id="log"></div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const log = (m) => { $("log").textContent += m + "\n"; $("log").scrollTop = $("log").scrollHeight; };
+const setStatus = (s, on=false) => { $("status").textContent = s; $("dot").classList.toggle("on", on); };
+
+const callId = "call_" + Math.random().toString(36).slice(2, 10);
+
+// Default: a simple agent that speaks first. Swap in your own systemPrompt/voice.
+$("config").value = JSON.stringify({
+  callId,
+  orgId: "org_test",
+  agentId: "agt_test",
+  versionId: "v1",
+  mode: "web_test",
+  direction: "inbound",
+  transport: { type: "smallwebrtc" },
+  agentConfig: {
+    type: "simple",
+    voice: { llmProvider: "openai", llmModel: "gpt-4.1-mini", sttProvider: "deepgram", ttsProvider: "cartesia", language: "en" },
+    persona: {
+      systemPrompt: "You are Vaani, a warm, concise voice receptionist for a dental clinic. Keep replies to one or two short sentences.",
+      agentSpeaksFirst: true,
+      greetingMessage: "Hi, this is Vaani at Bright Smile Dental. How can I help you today?"
+    }
+  },
+  variables: {},
+  callbacks: { report: "/dev/report-sink", events: "/dev/report-sink" }
+}, null, 2);
+
+let pc, localStream;
+
+async function connect() {
+  $("connect").disabled = true;
+  try {
+    const req = JSON.parse($("config").value);
+
+    setStatus("dispatching…");
+    const d = await fetch("/dispatch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(req) });
+    if (!d.ok) throw new Error("dispatch failed: " + d.status + " " + (await d.text()));
+    log("dispatched " + req.callId);
+
+    setStatus("getting mic…");
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+    localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+    pc.addTransceiver("audio", { direction: "recvonly" });
+
+    pc.ontrack = (e) => { $("remote").srcObject = e.streams[0]; log("← remote audio track"); };
+    pc.onconnectionstatechange = () => {
+      log("pc: " + pc.connectionState);
+      if (pc.connectionState === "connected") setStatus("connected — talk!", true);
+      if (["disconnected","failed","closed"].includes(pc.connectionState)) setStatus(pc.connectionState);
+    };
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await iceComplete(pc);
+
+    setStatus("signaling…");
+    const res = await fetch("/api/offer", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type, call_id: req.callId })
+    });
+    if (!res.ok) throw new Error("offer failed: " + res.status + " " + (await res.text()));
+    const answer = await res.json();
+    await pc.setRemoteDescription(answer);
+    log("← answer, pc_id=" + answer.pc_id);
+    $("hangup").disabled = false;
+  } catch (err) {
+    log("ERROR: " + err.message);
+    setStatus("error");
+    $("connect").disabled = false;
+  }
+}
+
+function iceComplete(pc) {
+  return new Promise((resolve) => {
+    if (pc.iceGatheringState === "complete") return resolve();
+    const check = () => { if (pc.iceGatheringState === "complete") { pc.removeEventListener("icegatheringstatechange", check); resolve(); } };
+    pc.addEventListener("icegatheringstatechange", check);
+    setTimeout(resolve, 2000); // fallback for trickle
+  });
+}
+
+function hangup() {
+  if (localStream) localStream.getTracks().forEach((t) => t.stop());
+  if (pc) pc.close();
+  setStatus("idle");
+  $("hangup").disabled = true;
+  $("connect").disabled = false;
+  log("hung up");
+}
+
+$("connect").addEventListener("click", connect);
+$("hangup").addEventListener("click", hangup);
+</script>
+</body>
+</html>

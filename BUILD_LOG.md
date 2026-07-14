@@ -18,7 +18,7 @@
 | 2026-07-14 | Monorepo: pnpm workspaces + Turborepo; Python engine via `uv`, same repo | One source of truth for the api↔engine contract; parallel workstreams |
 | 2026-07-14 | **Media transport: SmallWebRTC first**, LiveKit deferred to Phase 6 | Zero extra infra to get a browser talking to an agent; swap to LiveKit only when we add telephony |
 | 2026-07-14 | **Scope target: through Phase 5** (simple agents + tools + KB + post-call + flow agents) | Best effort/impact ratio for the hackathon; telephony (Phase 6) is stretch |
-| 2026-07-14 | Pipecat Flows stays a **separate `pipecat-ai-flows` package** (imported `pipecat_flows`), NOT merged into core | **Confirmed by `uv lock`:** `pipecat-ai` resolves to **1.5.0**, `pipecat-ai-flows` to **1.3.0** as a separate dep on top of it. The "1.5.0 merged flows into core" belief is false. We wrap flow usage behind one adapter so a future merge = one import change |
+| 2026-07-14 | **Pipecat Flows IS in core as `pipecat.flows`** (v1.5.0). Removed the standalone `pipecat-ai-flows` dep. | **Confirmed at runtime** — Pipecat 1.5.0 emits: *"the separate pipecat-ai-flows package is installed alongside a version that already includes Flows as `pipecat.flows`… uninstall it."* The user was right. (An earlier `uv lock` had co-installed both, and the June hub snapshot predated the merge — the running runtime is ground truth.) Flow runtime (Phase 5) imports from `pipecat.flows`. |
 | 2026-07-14 | Flow runtime targets the **modern dynamic-flows API** (`FlowManager`, `NodeConfig` built at runtime), not the removed static `FlowConfig` dicts | The reference repo used the old static API; dynamic is current |
 | 2026-07-14 | Contract lives in `@vaani/shared` (Zod) with a **pydantic mirror** in the engine | Single boundary both services validate against |
 
@@ -38,7 +38,7 @@
 | Phase | Goal | Status |
 |------|------|--------|
 | **0 — Foundation** | Monorepo, docker stack, shared dispatch contract | ✅ **Done** (commit `2bcab4a`) |
-| **1 — Voice walking skeleton** | `voice-engine`: FastAPI dispatch (blocks till call ends), SmallWebRTC transport, STT→LLM→TTS from hardcoded config, mandatory end-of-call report | 🔨 **In progress** — deps pinned+locked (pipecat 1.5.0), `config.py`, pydantic contract mirror done & verified. Next: `main.py` dispatch route + pipeline + report POST |
+| **1 — Voice walking skeleton** | `voice-engine`: FastAPI dispatch + SmallWebRTC transport, STT→LLM→TTS, mandatory end-of-call report, browser test console | ✅ **Done** — server boots, all endpoints verified. Needs a real browser + provider keys for the live voice test (see How to test) |
 | **2 — API foundation** | Better Auth (orgs/members/roles), Drizzle schema (agents, agent_versions, calls), agents CRUD + versioning/publish, dispatch endpoint, internal callbacks, credit stub | ⬜ |
 | **3 — Close the loop** | Config resolution (DB→dispatch payload), calls/call_turns persistence, realtime feedback events (dual sink WS+DB) | ⬜ |
 | **4 — Simple agent real** | Full advancedConfig (VAD, barge-in, greeting, variables), HTTP tools + end_call, KB (Qdrant RAG), post-call (summary + structured extraction + QA) | ⬜ |
@@ -68,16 +68,18 @@ Legend: ✅ done · 🔨 in progress · ⬜ todo · ⏸ deferred past Phase 5
 
 ### Voice engine (Phase 1–4)
 - ✅ Pydantic mirror of `@vaani/shared` contract (`engine/contract.py`, verified round-trip)
-- ✅ Deps pinned + locked (`pyproject.toml` + `uv.lock`; pipecat 1.5.0, flows 1.3.0)
+- ✅ Deps pinned + locked (`pyproject.toml` + `uv.lock`; pipecat 1.5.0, flows in core)
 - ✅ Settings (`engine/config.py`, env-only, no per-agent state)
-- 🔨 FastAPI dispatch route (blocks until call ends)
-- 🔨 SmallWebRTC transport (browser test)
-- 🔨 STT→LLM→TTS pipeline + provider factories
-- ⬜ Mandatory end-of-call report (even on error)
-- ⬜ VAD / barge-in tuning from config
-- ⬜ Variable substitution engine + built-in `{{date}}`/`{{time}}`
-- ⬜ Realtime feedback observer (dual sink)
-- ⬜ Metrics observer (voice-to-voice latency, interruptions, turns)
+- ✅ FastAPI dispatch route (`/dispatch`) + SmallWebRTC signaling (`/api/offer`)
+- ✅ SmallWebRTC transport + browser test console (`/`, served static)
+- ✅ STT→LLM→TTS pipeline + provider factories (Deepgram/OpenAI/Cartesia; others fall back w/ warning → Phase 4)
+- ✅ Mandatory end-of-call report (try/finally, delivered even on error) + `/dev/report-sink`
+- ✅ VAD via SileroVADAnalyzer from `advanced.vad` (barge-in)
+- ✅ Variable substitution engine + built-in `{{date}}`/`{{time}}`
+- ⬜ Realtime feedback observer (dual sink) — Phase 3
+- ⬜ Metrics observer (voice-to-voice latency, interruptions) — richer metrics Phase 4
+- ⬜ Migrate service factories to non-deprecated `settings=` API (small cleanup)
+- ⬜ Full transcript/turn capture via observer (currently read from LLM context at call end)
 
 ### Tools & function calling (Phase 4)
 - ⬜ Custom HTTP tools (org library, encrypted auth), attach to agent
@@ -126,6 +128,24 @@ Defined in `packages/shared/src/` — change deliberately, both sides depend on 
 The engine keeps a **pydantic mirror** of these (Phase 1). CI will check they stay in sync.
 
 ---
+
+## How to test the voice engine (Phase 1)
+
+Real voice needs a browser + mic + your provider keys (OpenAI, Deepgram, Cartesia).
+
+```bash
+cd apps/voice-engine
+cp ../../.env.example .env          # then fill OPENAI/DEEPGRAM/CARTESIA keys (or export them)
+uv sync
+uv run uvicorn engine.main:app --host 0.0.0.0 --port 7860
+```
+
+Then open **http://localhost:7860/** in Chrome:
+1. The test console pre-fills a simple "dental receptionist" agent — edit the config if you like.
+2. Click **Connect & Talk**, allow the mic. The agent greets you; talk back.
+3. Watch the terminal: dispatch log → transcript → the end-of-call report at `/dev/report-sink`.
+
+Verified without a mic (server side): `/health`, `/dispatch` (registers call), `/api/offer` (404 on unknown call), `/` (test page), `/dev/report-sink`. Boots clean on pipecat 1.5.0.
 
 ## Quickref
 
