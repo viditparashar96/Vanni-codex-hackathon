@@ -38,7 +38,7 @@
 | Phase | Goal | Status |
 |------|------|--------|
 | **0 — Foundation** | Monorepo, docker stack, shared dispatch contract | ✅ **Done** (commit `2bcab4a`) |
-| **1 — Voice walking skeleton** | `voice-engine`: FastAPI dispatch + SmallWebRTC transport, STT→LLM→TTS, mandatory end-of-call report, browser test console | ✅ **Done** — server boots, all endpoints verified. Needs a real browser + provider keys for the live voice test (see How to test) |
+| **1 — Voice walking skeleton** | `voice-engine`: FastAPI dispatch + SmallWebRTC transport, STT→LLM→TTS, mandatory end-of-call report, browser test console | ✅ **DONE + LIVE-VERIFIED** — real two-way voice call confirmed in-browser (mic → Deepgram → GPT-4.1-mini → Cartesia → speaker) on 2026-07-14 |
 | **2 — API foundation** | Better Auth (orgs/members/roles), Drizzle schema (agents, agent_versions, calls), agents CRUD + versioning/publish, dispatch endpoint, internal callbacks, credit stub | ⬜ |
 | **3 — Close the loop** | Config resolution (DB→dispatch payload), calls/call_turns persistence, realtime feedback events (dual sink WS+DB) | ⬜ |
 | **4 — Simple agent real** | Full advancedConfig (VAD, barge-in, greeting, variables), HTTP tools + end_call, KB (Qdrant RAG), post-call (summary + structured extraction + QA) | ⬜ |
@@ -172,4 +172,4 @@ cd apps/voice-engine && uv sync && uv run uvicorn engine.main:app --port 7860 --
 cd apps/api && pnpm dev   # :4000
 ```
 
-**Current position:** Phase 0 complete and pushed. **Next action:** Phase 1 — voice-engine walking skeleton (SmallWebRTC + STT/LLM/TTS + dispatch route + end-of-call report), verifying every Pipecat import against the local hub before writing it.
+**Current position:** Phases 0–1 complete; Phase 1 live-verified with a real browser voice call. Phase 2 (API foundation: auth+orgs+RBAC, Drizzle schema, agents CRUD+versioning, dispatch endpoint) in progress. **Next action:** integrate Phase 2 output, wire to Neon Postgres, then Phase 3 (close the loop: config resolution DB→dispatch, calls persistence, live event stream).
