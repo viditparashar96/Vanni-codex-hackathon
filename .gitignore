@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Python (voice-engine)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Builds
+dist/
+build/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Logs & OS
+*.log
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Coverage
+coverage/
+.nyc_output/
+htmlcov/
+
+# Local infra data
+pgdata/
+qdrant_storage/
