@@ -11,7 +11,15 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
-import type { PersonaConfig, VoiceConfig } from "@vaani/shared";
+import {
+  FlowConfigSchema,
+  PersonaConfigSchema,
+  VoiceConfigSchema,
+  validateFlowConfig,
+  type FlowConfig,
+  type PersonaConfig,
+  type VoiceConfig,
+} from "@vaani/shared";
 import { db } from "../db/index.js";
 import {
   agents,
@@ -81,6 +89,53 @@ async function latestVersion(agentId: string) {
     .limit(1);
   return version;
 }
+
+/** Same validation the dashboard's validate-flow route runs: shared Zod schema
+ *  first, then graph invariants (one initial, ≥1 end, no dead ends, telephony
+ *  branches present, targets resolve). Empty array = valid. */
+function flowErrors(raw: unknown): { errors: string[]; flow?: FlowConfig } {
+  const parsed = FlowConfigSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      errors: parsed.error.issues.map((i) =>
+        i.path.length ? `${i.path.join(".")}: ${i.message}` : i.message
+      ),
+    };
+  }
+  const graph = validateFlowConfig(parsed.data).map((e) =>
+    e.nodeId ? `[${e.nodeId}] ${e.message}` : e.message
+  );
+  return { errors: graph, flow: parsed.data };
+}
+
+const FLOW_SHAPE_GUIDE = `FlowConfig shape:
+{
+  "meta": { "name": "...", "version": "1.0" },
+  "nodes": [
+    { "id": "greet", "type": "initial", "data": {
+        "label": "Greet & verify",
+        "taskMessages": [{ "role": "system", "content": "Verify the caller's DOB before continuing." }],
+        "firstMessage": "Hi! This is ...",
+        "functions": [
+          { "name": "identity_verified", "description": "Caller confirmed their DOB",
+            "handlerType": "transition", "targetNode": "book" }
+        ] } },
+    { "id": "book", "type": "node", "data": {
+        "label": "Book appointment",
+        "taskMessages": [{ "role": "system", "content": "Offer the two soonest slots." }],
+        "functions": [
+          { "name": "slot_confirmed", "description": "Caller accepted a slot",
+            "handlerType": "transition", "targetNode": "wrap",
+            "properties": { "slot": { "type": "string" } }, "required": ["slot"] }
+        ] } },
+    { "id": "wrap", "type": "end", "data": {
+        "label": "Goodbye", "taskMessages": [{ "role": "system", "content": "Thank the caller and end." }] } }
+  ]
+}
+Rules: exactly one "initial" node, at least one "end" node, every non-end node
+needs ≥1 outgoing function, every targetNode must exist. transfer nodes need a
+transfer-failure branch; sms nodes need sms-success and sms-failure branches.
+Captured properties become {{variables}} downstream.`;
 
 export function buildMcpServer(ctx: McpContext): McpServer {
   const server = new McpServer({ name: "vaani", version: "0.1.0" });
@@ -178,6 +233,18 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       };
       const voiceConfig = voiceFromFlat(voice);
 
+      // Validate against the shared contract — same gate as the dashboard.
+      const personaCheck = PersonaConfigSchema.partial().safeParse(personaConfig);
+      if (!personaCheck.success) {
+        return err(`Invalid persona config: ${personaCheck.error.issues.map((i) => i.message).join("; ")}`);
+      }
+      if (voiceConfig) {
+        const voiceCheck = VoiceConfigSchema.partial().safeParse(voiceConfig);
+        if (!voiceCheck.success) {
+          return err(`Invalid voice config: ${voiceCheck.error.issues.map((i) => i.message).join("; ")}`);
+        }
+      }
+
       const result = await db.transaction(async (tx) => {
         const [agent] = await tx
           .insert(agents)
@@ -212,6 +279,85 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         status: result.agent.status,
         dashboardUrl: `${clientUrl()}/agents/${result.agent.id}`,
         next: "Call publish_agent to make it live, or start_test_call to try it in the browser.",
+      });
+    }
+  );
+
+  server.registerTool(
+    "validate_flow",
+    {
+      title: "Validate flow config",
+      description: `Check a flow-agent graph against the platform's validation rules without creating anything. Returns the exact error list the dashboard shows — fix and re-validate until valid. ${FLOW_SHAPE_GUIDE}`,
+      inputSchema: {
+        flow: z.record(z.string(), z.unknown()).describe("FlowConfig JSON (see tool description for shape)"),
+      },
+    },
+    async ({ flow }) => {
+      const { errors } = flowErrors(flow);
+      return json({ valid: errors.length === 0, errors });
+    }
+  );
+
+  server.registerTool(
+    "create_flow_agent",
+    {
+      title: "Create flow agent",
+      description: `Create a multi-stage flow agent — a directed graph of conversation stages with LLM-picked transitions. The graph is validated before anything is written; on errors, nothing is created and the error list is returned. Use validate_flow to iterate first. ${FLOW_SHAPE_GUIDE}`,
+      inputSchema: {
+        name: z.string().min(1),
+        description: z.string().optional(),
+        flow: z.record(z.string(), z.unknown()).describe("FlowConfig JSON (see tool description for shape)"),
+        ...VOICE_FIELDS,
+      },
+    },
+    async ({ name, description, flow, ...voice }) => {
+      const { errors, flow: validFlow } = flowErrors(flow);
+      if (errors.length > 0 || !validFlow) {
+        return err(`Flow config invalid — nothing created. Fix these and retry:\n- ${errors.join("\n- ")}`);
+      }
+      const voiceConfig = voiceFromFlat(voice);
+      if (voiceConfig) {
+        const voiceCheck = VoiceConfigSchema.partial().safeParse(voiceConfig);
+        if (!voiceCheck.success) {
+          return err(`Invalid voice config: ${voiceCheck.error.issues.map((i) => i.message).join("; ")}`);
+        }
+      }
+
+      const result = await db.transaction(async (tx) => {
+        const [agent] = await tx
+          .insert(agents)
+          .values({
+            orgId: ctx.orgId,
+            name,
+            description,
+            type: "flow",
+            tags: ["mcp"],
+            createdBy: ctx.userId,
+          })
+          .returning();
+        const [v1] = await tx
+          .insert(agentVersions)
+          .values({
+            agentId: agent.id,
+            versionNumber: 1,
+            flowConfig: validFlow as unknown as Record<string, unknown>,
+            voiceConfig,
+            toolsConfig: [],
+            knowledgeBaseBindings: [],
+            createdBy: ctx.userId,
+          })
+          .returning();
+        return { agent, version: v1 };
+      });
+
+      return json({
+        created: true,
+        type: "flow",
+        agentId: result.agent.id,
+        versionId: result.version.id,
+        nodes: validFlow.nodes.length,
+        dashboardUrl: `${clientUrl()}/agents/${result.agent.id}/flow`,
+        next: "Open dashboardUrl to see the graph on the canvas, publish_agent to go live, start_test_call to talk to it.",
       });
     }
   );

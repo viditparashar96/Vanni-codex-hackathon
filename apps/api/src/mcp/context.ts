@@ -43,6 +43,14 @@ export async function mcpAuth(req: Request, res: Response, next: NextFunction) {
   const header = String(req.headers.authorization ?? "");
   const bearer = header.replace(/^Bearer\s+/i, "").trim();
 
+  // 0. Exact match on the static operator key wins — it may share the vaa_
+  //    prefix with org keys, so this check must come before the hash lookup.
+  const expected = process.env.MCP_API_KEY;
+  if (expected && bearer === expected) {
+    next();
+    return;
+  }
+
   // 1. Per-org API key.
   if (bearer.startsWith("vaa_")) {
     try {
@@ -61,8 +69,7 @@ export async function mcpAuth(req: Request, res: Response, next: NextFunction) {
     return;
   }
 
-  // 2. Legacy static key (dev / single operator).
-  const expected = process.env.MCP_API_KEY;
+  // 2. No key material matched. Open only in keyless dev.
   if (!expected) {
     if (process.env.NODE_ENV === "production") {
       deny(res, -32000, 503, "MCP disabled: no API key configured");
