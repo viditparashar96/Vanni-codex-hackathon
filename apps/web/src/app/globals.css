@@ -259,6 +259,100 @@
   animation: marquee 28s linear infinite;
 }
 
+/* ── auth visual-side life ── */
+@keyframes band-sway {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(6%, 4%, 0) scale(1.12);
+  }
+}
+.band-sway {
+  position: relative;
+  overflow: hidden;
+}
+.band-sway::before {
+  content: "";
+  position: absolute;
+  inset: -10%;
+  background: inherit;
+  opacity: 0.28;
+  filter: blur(60px);
+  animation: band-sway 14s ease-in-out infinite alternate;
+}
+.band-sway:nth-child(2)::before {
+  animation-duration: 16s;
+  animation-delay: -3s;
+}
+.band-sway:nth-child(3)::before {
+  animation-duration: 18s;
+  animation-delay: -6s;
+}
+
+@keyframes sticker-float {
+  from {
+    transform: translate(0, 0) rotate(var(--rot, -6deg));
+  }
+  to {
+    transform: translate(4px, -10px) rotate(var(--rot, -6deg));
+  }
+}
+.sticker-float {
+  animation: sticker-float 5s ease-in-out infinite alternate;
+}
+
+@keyframes card-drift {
+  from {
+    transform: translate(-50%, -52%);
+  }
+  to {
+    transform: translate(-50%, -48%);
+  }
+}
+.card-drift {
+  animation: card-drift 6s ease-in-out infinite alternate;
+}
+
+@keyframes orbit-spin {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+.orbit-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(560px, 78%);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 1.5px dashed rgba(14, 15, 12, 0.22);
+  border-radius: 50%;
+  animation: orbit-spin 46s linear infinite;
+  pointer-events: none;
+}
+.orbit-dot {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink);
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.pop-in {
+  animation: pop-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 @keyframes rise-in {
   from {
     opacity: 0;
@@ -289,9 +383,17 @@
   .word-reveal > span,
   .rise-in,
   .marquee-track,
-  .pulse-dot {
+  .pulse-dot,
+  .band-sway::before,
+  .sticker-float,
+  .card-drift,
+  .orbit-ring,
+  .pop-in {
     animation: none;
     transform: none;
+  }
+  .card-drift {
+    transform: translate(-50%, -50%);
   }
 }
 
