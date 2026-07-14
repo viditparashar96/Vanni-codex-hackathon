@@ -39,3 +39,6 @@ htmlcov/
 # Local infra data
 pgdata/
 qdrant_storage/
+
+# local Claude Code config — never commit
+.claude/
