@@ -47,11 +47,16 @@
 | **4a — Frontend wiring** | Real auth, org context, mutations, live test console (WebRTC→engine), real data across chrome | ✅ **DONE + BROWSER-VERIFIED** — signup→auto-org+$2→real dashboard→create agent→test call connects & bot speaks; sidebar/topbar/overview show real org/user/credits; call history shows real completed calls. Fixes: raw-cookie forwarding, client/server split, CORS on engine, Cartesia voice/model guards, form voice→provider mapping |
 | **4b — Simple agent completeness** | Tool calling + end_call + advancedConfig behaviors (engine) | 🟡 tools + greeting/goodbye/VAD/barge-in/timeouts done; multi-provider wired (LLM openai/groq/anthropic/google, STT deepgram/openai/assemblyai/azure, TTS cartesia/openai/elevenlabs) |
 
-### Simple-agent gap vs reference (non-telephony) — remaining work
-- ❌ **Provider catalogs + icons**: no llm/stt/tts/voice/realtime catalogs, no brand icons, no voice previews; new-agent + agent-builder dropdowns hardcoded & inconsistent → port catalogs + provider-icon, wire both forms
-- ❌ **Agent-builder persistence**: only ~4 fields save; prompt/greeting/model/voice/advanced/tools/KB edits discarded → make fully controlled + persist all tabs
-- ❌ **Post-call intelligence**: engine EndOfCallReport leaves usage/analysis/qa/recording empty → compute cost/usage + summary/QA/structured-data; then history/analytics off mock
-- 🟡 **advanced behaviors**: missing RAG (Qdrant), recording→blob, thinking sounds, screen-aware
+### Simple-agent gap vs reference (non-telephony) — progress
+- ✅ **Provider catalogs + icons** (commit fb38b6a): llm/stt/tts/voice/realtime catalogs (real model ids + Cartesia voice UUIDs) + inline brand SVG icons; both forms wired; agent-builder controlled + persists tabs
+- ✅ **Post-call intelligence** (commit 2e395b8): engine fills usage (tokens/chars/STT secs), metrics (v2v latency/interruptions/turns), analysis (summary/sentiment/structured), qa (score+tags) — fail-open
+- ✅ **Real transcript in history** (commit e50962c): call-detail renders real call.turns/call.events (mock fallback only when empty)
+- 🟡 **Recording**: audio→blob capture NOT implemented yet (recording_path stays null) — deferred
+- 🟡 **advanced behaviors**: RAG (Qdrant), thinking sounds, screen-aware — deferred
+
+### Flow agent
+- ✅ **Foundation** (commit 577f048): full flow schema in @vaani/shared (all node types + transitions + per-node overrides + global settings; telephony nodes as config) + validateFlowConfig + API validation + /validate-flow endpoint
+- 🔨 **Designer + runtime** (in progress): React Flow canvas (all node types, inspector, live validation, save) + pipecat.flows dynamic-flows engine runtime; telephony nodes = logged no-op stubs
 | **4 — Simple agent real** | Full advancedConfig (VAD, barge-in, greeting, variables), HTTP tools + end_call, KB (Qdrant RAG), post-call (summary + structured extraction + QA) | ⬜ |
 | **5 — Flow agents** | Dynamic-flows runtime (behind adapter), node types + transitions, flow validation | ⬜ (scope finish line) |
 | 6 — Telephony (stretch) | LiveKit SIP, Twilio+Plivo, inbound routing, outbound, transfer/DTMF/SMS | ⬜ deferred |
