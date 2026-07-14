@@ -38,8 +38,10 @@ export function CallDetail({ call }: { call: Call }) {
     return () => clearInterval(t);
   }, [playing, total]);
 
-  const turns = detailedTurns;
-  const events = detailedEvents;
+  // Prefer the real per-call transcript/timeline from the API; fall back to the
+  // demo constants only when a call has none (e.g. legacy or mock-mode data).
+  const turns = call.turns?.length ? call.turns : detailedTurns;
+  const events = call.events?.length ? call.events : detailedEvents;
 
   return (
     <div className="flex h-full flex-col">
