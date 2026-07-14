@@ -202,3 +202,81 @@ def register_tools(
     context.set_tools(ToolsSchema(standard_tools=schemas) if schemas else ToolsSchema([]))
     logger.info(f"[tools] {len(schemas)} tool(s) attached to context")
     return schemas
+
+
+def build_flow_tool_functions(tools: list[HttpTool], variables: dict[str, str]):
+    """Build Pipecat Flows function schemas for a set of HTTP tools.
+
+    The flow runtime (FlowManager) owns tool advertising per node, so — unlike
+    ``register_tools`` (which sets the context tools directly for the single
+    agent) — HTTP tools here are handed to the FlowManager as node/global
+    functions. This reuses the same URL/auth templating and parameter-splitting
+    machinery as ``register_tools``; only the handler signature differs
+    (``(args, flow_manager)`` instead of ``FunctionCallParams``).
+
+    Returns a list of ``FlowsFunctionSchema``. Each handler performs the HTTP
+    call and returns ``(result, None)`` — a data-fetch function that never
+    transitions the flow.
+    """
+    from pipecat.flows import FlowsFunctionSchema
+
+    functions = []
+    for tool in tools:
+        properties, required = _split_parameters(tool.parameters)
+        functions.append(
+            FlowsFunctionSchema(
+                name=tool.name,
+                description=_fill_template(tool.description, variables),
+                properties=properties,
+                required=required,
+                handler=_make_flow_http_handler(tool, variables),
+            )
+        )
+        logger.info(f"[flow-tools] built HTTP tool '{tool.name}' ({tool.method} {tool.url})")
+    return functions
+
+
+def _make_flow_http_handler(tool: HttpTool, variables: dict[str, str]):
+    """Flows-shaped handler ``(args, flow_manager) -> (result, None)`` performing
+    the tool's HTTP call. Mirrors ``_make_http_handler`` but for the flow runtime."""
+
+    async def handler(args: dict[str, Any], _flow_manager: Any):
+        args = dict(args or {})
+        url_values = {**variables, **{k: str(v) for k, v in args.items()}}
+        url = _fill_template(tool.url, url_values)
+
+        headers: dict[str, str] = {}
+        if tool.headers:
+            headers = {k: _fill_template(v, variables) for k, v in tool.headers.items()}
+        _apply_auth(headers, tool.auth, variables)
+
+        method = tool.method.upper()
+        timeout = max(tool.timeout_ms, 1) / 1000
+        logger.info(f"[flow-tools] calling '{tool.name}' -> {method} {url}")
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                if method == "GET":
+                    response = await client.request(method, url, params=args, headers=headers)
+                else:
+                    response = await client.request(method, url, json=args, headers=headers)
+
+            content_type = response.headers.get("content-type", "")
+            if "application/json" in content_type:
+                try:
+                    body = response.json()
+                except Exception:
+                    body = response.text
+            else:
+                body = response.text
+
+            logger.info(f"[flow-tools] '{tool.name}' -> HTTP {response.status_code}")
+            return {"status_code": response.status_code, "body": body}, None
+        except httpx.TimeoutException:
+            logger.warning(f"[flow-tools] '{tool.name}' timed out after {timeout}s")
+            return {"error": f"The '{tool.name}' request timed out after {timeout} seconds."}, None
+        except Exception as exc:
+            logger.exception(f"[flow-tools] '{tool.name}' failed")
+            return {"error": f"The '{tool.name}' request failed: {exc}"}, None
+
+    return handler

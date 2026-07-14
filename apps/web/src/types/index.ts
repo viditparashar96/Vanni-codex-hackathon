@@ -28,6 +28,8 @@ export interface Agent {
   systemPrompt?: string;
   greetingMessage?: string;
   agentSpeaksFirst?: boolean;
+  /** Flow-agent graph (flow-type agents only). Opaque here; typed in flow-contract. */
+  flowConfig?: Record<string, unknown> | null;
 }
 
 export type CallDirection = "inbound" | "outbound";
@@ -263,23 +265,9 @@ export interface OrgCredits {
   burnLast7d: number;
 }
 
-/* ── Flow designer ── */
-
-export type FlowNodeKind =
-  | "initial"
-  | "node"
-  | "transfer"
-  | "dtmf"
-  | "sms"
-  | "end";
-
-export interface FlowNodeData {
-  label: string;
-  kind: FlowNodeKind;
-  task: string;
-  firstMessage?: string;
-  toolCount?: number;
-  kbBound?: boolean;
-  modelOverride?: string;
-  [key: string]: unknown;
-}
+/* ── Flow designer ──
+ * The flow-graph authoring contract (nodes, transitions, service overrides)
+ * lives in `@/lib/flow-contract`, and the React Flow canvas model in
+ * `@/lib/flow-transform`. Kept out of this shared domain-type module so the
+ * designer's editor-only shapes don't leak into the rest of the app.
+ */

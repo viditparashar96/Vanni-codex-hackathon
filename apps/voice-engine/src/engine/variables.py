@@ -10,7 +10,7 @@ import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from engine.contract import AgentConfig
+from engine.contract import AgentConfig, FlowConfig
 
 _TOKEN = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
 
@@ -28,6 +28,29 @@ def build_variable_map(config: AgentConfig, injected: dict[str, str], timezone: 
     values.update({k: str(v) for k, v in injected.items()})
 
     # built-ins
+    try:
+        now = datetime.now(ZoneInfo(timezone))
+    except Exception:
+        now = datetime.now(ZoneInfo("UTC"))
+    values.setdefault("date", now.strftime("%A, %B %d, %Y"))
+    values.setdefault("time", now.strftime("%I:%M %p"))
+
+    return values
+
+
+def build_flow_variable_map(
+    flow: FlowConfig, injected: dict[str, str], timezone: str
+) -> dict[str, str]:
+    """Variable map for a flow agent: flow.customVariable defaults, then per-call
+    injected values (which win), then built-in {{date}}/{{time}}."""
+    values: dict[str, str] = {}
+
+    for cv in flow.custom_variables or []:
+        if cv.default_value is not None:
+            values[cv.name] = cv.default_value
+
+    values.update({k: str(v) for k, v in injected.items()})
+
     try:
         now = datetime.now(ZoneInfo(timezone))
     except Exception:

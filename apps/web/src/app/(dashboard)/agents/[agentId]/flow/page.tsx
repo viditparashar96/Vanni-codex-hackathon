@@ -8,8 +8,12 @@ export default async function FlowPage({
   params: Promise<{ agentId: string }>;
 }) {
   const { agentId } = await params;
-  const agent = await api.getAgent(agentId);
+  const [agent, tools, knowledgeBases] = await Promise.all([
+    api.getAgent(agentId),
+    api.getTools(),
+    api.getKnowledgeBases(),
+  ]);
   if (!agent) notFound();
 
-  return <FlowDesigner agent={agent} />;
+  return <FlowDesigner agent={agent} tools={tools} knowledgeBases={knowledgeBases} />;
 }

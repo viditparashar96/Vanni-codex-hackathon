@@ -26,6 +26,7 @@ from loguru import logger
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
 
 from engine.bots.base import run_simple_bot
+from engine.bots.flow import run_flow_bot
 from engine.config import settings
 from engine.contract import AgentConfig, DispatchAck, DispatchRequest, EndOfCallReport
 
@@ -132,7 +133,10 @@ async def offer(request: dict, background_tasks: BackgroundTasks):
         _pcs.pop(c.pc_id, None)
         logger.info(f"[offer] connection closed pc_id={c.pc_id}")
 
-    background_tasks.add_task(run_simple_bot, conn, dispatch_req, _make_report_sink(dispatch_req))
+    # Route by agent type: a flow agent walks a node graph (run_flow_bot); a
+    # simple agent runs a single system prompt (run_simple_bot).
+    bot = run_flow_bot if dispatch_req.agent_config.type == "flow" else run_simple_bot
+    background_tasks.add_task(bot, conn, dispatch_req, _make_report_sink(dispatch_req))
 
     answer = conn.get_answer()
     _pcs[answer["pc_id"]] = conn

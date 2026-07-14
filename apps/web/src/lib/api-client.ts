@@ -168,6 +168,18 @@ export interface AgentVersionPayload {
   advancedConfig?: AdvancedConfigPayload;
   toolsConfig?: ToolConfigPayload[];
   knowledgeBaseBindings?: KnowledgeBaseBindingPayload[];
+  /**
+   * Full flow-agent graph. Sent as an opaque object (the server validates it
+   * against the shared FlowConfig schema) so this client stays free of the
+   * server package.
+   */
+  flowConfig?: Record<string, unknown>;
+}
+
+/** Result of the live flow-validation endpoint. */
+export interface FlowValidationResult {
+  valid: boolean;
+  errors: string[];
 }
 
 /** An immutable agent version as returned by the create-version endpoint. */
@@ -196,6 +208,21 @@ export const api = {
     mutate<{ version: AgentVersion }>(`/agents/${id}/versions`, "POST", payload).then(
       (r) => r.version,
     ),
+  /**
+   * Persist a flow-agent graph by minting a new version carrying `flowConfig`.
+   * The server re-validates the graph and rejects (400) an invalid one.
+   */
+  saveFlow: (id: string, flowConfig: Record<string, unknown>, label?: string) =>
+    mutate<{ version: AgentVersion }>(`/agents/${id}/versions`, "POST", {
+      flowConfig,
+      label,
+    }).then((r) => r.version),
+  /**
+   * Validate a flow graph without persisting, for the live editor. Returns the
+   * backend's `{ valid, errors }` verdict.
+   */
+  validateFlow: (id: string, flowConfig: Record<string, unknown>) =>
+    mutate<FlowValidationResult>(`/agents/${id}/validate-flow`, "POST", flowConfig),
   publishAgent: (id: string, versionId: string) =>
     mutate<Agent>(`/agents/${id}/publish`, "POST", { versionId }),
   archiveAgent: (id: string) => mutate<Agent>(`/agents/${id}/archive`, "POST", {}),

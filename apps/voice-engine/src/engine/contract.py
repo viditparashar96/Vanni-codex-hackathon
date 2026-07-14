@@ -135,11 +135,144 @@ class KnowledgeBaseBinding(_Base):
     similarity_threshold: float = 0.5
 
 
+# ── Flow-agent graph (mirrors @vaani/shared FlowConfig) ─────────────────────
+#
+# A flow agent is a directed graph of conversation stages ("nodes") wired
+# together by transitions ("functions"). Each node has its own objective,
+# prompts, tools, and service overrides; the LLM advances the call by calling
+# one of the node's transition functions when that branch's condition is met.
+# The engine compiles each node into a Pipecat Flows NodeConfig on entry.
+
+FlowNodeType = Literal["initial", "node", "end", "transfer", "dtmf", "sms"]
+HandlerType = Literal["transition", "end_conversation"]
+ContextStrategyName = Literal["append", "reset", "reset_with_summary"]
+SourceHandle = Literal["transfer-failure", "sms-success", "sms-failure"]
+
+
+class FlowMessage(_Base):
+    """A single prompt message. Task messages are framework instructions; role
+    messages define the node's persona."""
+
+    role: Literal["system", "user", "assistant", "developer"] = "system"
+    content: str
+
+
+class FlowServiceLlm(_Base):
+    model: str | None = None
+    temperature: float | None = None
+
+
+class FlowServiceTts(_Base):
+    voice: str | None = None
+    model: str | None = None
+    speed: float | None = None
+
+
+class FlowServiceStt(_Base):
+    model: str | None = None
+    language: str | None = None
+
+
+class FlowServiceOverrides(_Base):
+    """Per-node overrides of the pipeline's LLM/TTS/STT services, applied on
+    entry to the node via update-settings frames and implicitly reverted by the
+    next node's own settings."""
+
+    llm: FlowServiceLlm | None = None
+    tts: FlowServiceTts | None = None
+    stt: FlowServiceStt | None = None
+    stt_mute: bool | None = None
+
+
+class FlowTransition(_Base):
+    """A transition out of a node. The LLM picks one by calling it; `description`
+    tells the model WHEN this branch applies. `properties`/`required` are the
+    data captured as the branch fires; captured values become `{{param}}`
+    downstream."""
+
+    name: str
+    description: str
+    handler_type: HandlerType = "transition"
+    target_node: str | None = None
+    properties: dict[str, Any] | None = None
+    required: list[str] | None = None
+    transition_speech: str | None = None
+    source_handle: SourceHandle | None = None
+
+
+class FlowNodeData(_Base):
+    label: str
+    task_messages: list[FlowMessage] = Field(default_factory=list)
+    role_messages: list[FlowMessage] | None = None
+    respond_immediately: bool | None = None
+    first_message: str | None = None
+    context_strategy: ContextStrategyName | None = None
+    summary_prompt: str | None = None
+    service_overrides: FlowServiceOverrides | None = None
+    tool_ids: list[str] | None = None
+    knowledge_base: KnowledgeBaseBinding | None = None
+    functions: list[FlowTransition] = Field(default_factory=list)
+
+    # Telephony node fields (type: transfer | dtmf | sms).
+    transfer_to: str | None = None
+    transfer_type: Literal["cold", "warm"] | None = None
+    dtmf_digits: str | None = None
+    sms_content: str | None = None
+    sms_to: Literal["caller", "static"] | None = None
+    sms_to_number: str | None = None
+
+
+class FlowNodePosition(_Base):
+    x: float = 0
+    y: float = 0
+
+
+class FlowNode(_Base):
+    id: str
+    type: FlowNodeType = "node"
+    position: FlowNodePosition | None = None
+    data: FlowNodeData
+
+
+class FlowMeta(_Base):
+    name: str
+    version: str
+    description: str | None = None
+
+
+class GlobalCallSettings(_Base):
+    """The flow-agent counterpart to AdvancedConfig — call-level behaviour that
+    applies across every node."""
+
+    max_call_duration_secs: int = 240
+    inactivity_timeout_secs: int = 30
+    timezone: str = "UTC"
+    vad: VadConfig = Field(default_factory=VadConfig)
+    background_noise: BackgroundNoise = Field(default_factory=BackgroundNoise)
+    graceful_exit_enabled: bool = True
+    graceful_exit_warning_secs: int = 30
+    goodbye_message: str = "Thank you for your time. Goodbye!"
+    voicemail: VoicemailConfig = Field(default_factory=VoicemailConfig)
+    post_call_analysis: dict[str, Any] | None = None
+
+
+class FlowConfig(_Base):
+    meta: FlowMeta
+    nodes: list[FlowNode] = Field(default_factory=list)
+    global_role_messages: list[FlowMessage] | None = None
+    global_tool_ids: list[str] | None = None
+    global_knowledge_bases: list[KnowledgeBaseBinding] | None = None
+    global_context_strategy: ContextStrategyName | None = None
+    global_summary_prompt: str | None = None
+    custom_variables: list[CustomVariable] | None = None
+    global_call_settings: GlobalCallSettings | None = None
+
+
 class AgentConfig(_Base):
     type: Literal["simple", "flow"]
     voice: VoiceConfig
     persona: PersonaConfig | None = None
-    flow: dict[str, Any] | None = None
+    flow: FlowConfig | None = None
     advanced: AdvancedConfig = Field(default_factory=AdvancedConfig)
     tools: list[HttpTool] = Field(default_factory=list)
     knowledge_bases: list[KnowledgeBaseBinding] = Field(default_factory=list)
