@@ -13,29 +13,28 @@ import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ProviderIcon } from "@/components/shared/provider-icon";
+import { LLM_PROVIDER_GROUPS, DEFAULT_LLM_MODEL } from "@/lib/llm-catalog";
+import { STT_PROVIDER_GROUPS, DEFAULT_STT_MODEL } from "@/lib/stt-catalog";
+import { TTS_PROVIDER_GROUPS, DEFAULT_TTS_PROVIDER } from "@/lib/tts-catalog";
+import {
+  VOICE_CATALOG,
+  LANGUAGE_CATALOG,
+  DEFAULT_VOICE_ID,
+  DEFAULT_LANGUAGE,
+} from "@/lib/voice-catalog";
 
 const TEMPLATES = [
   { name: "Appointment reminder", desc: "Confirm, reschedule or cancel — with SMS follow-up.", type: "flow" },
   { name: "Reception / front desk", desc: "Answer the main line, book visits, transfer to humans.", type: "simple" },
   { name: "Lead qualifier", desc: "Qualify inbound web leads and book a meeting.", type: "flow" },
   { name: "Survey", desc: "Short NPS or CSAT survey with structured extraction.", type: "simple" },
-];
-
-const LLMS = ["gpt-4.1-mini", "gpt-4.1", "claude-haiku-4-5", "claude-sonnet-5", "gemini-2.5-flash"];
-const STTS = ["nova-3-general", "nova-3-medical", "universal-2", "whisper-large-v3"];
-const TTSS = ["cartesia", "elevenlabs", "deepgram-aura", "openai-tts"];
-const VOICES = ["Aria", "Rowan", "Isla", "Theo"];
-const LANGUAGES = [
-  { value: "en", label: "English (US)" },
-  { value: "en-IN", label: "English (India)" },
-  { value: "es", label: "Spanish" },
-  { value: "fr", label: "French" },
-  { value: "de", label: "German" },
-  { value: "hi", label: "Hindi" },
 ];
 
 function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
@@ -47,7 +46,60 @@ function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: stri
   );
 }
 
-function VoiceSelect({
+/** Shared trigger styling so every voice-stack select matches the page design. */
+const stackTriggerClass = "h-11 w-full rounded-xl border-[1.5px] border-input";
+
+/**
+ * A model picker grouped by provider, with the ProviderIcon shown next to each
+ * provider group. The submitted value is the model id.
+ */
+function GroupedModelSelect({
+  label,
+  value,
+  onChange,
+  groups,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  groups: {
+    provider: string;
+    label: string;
+    models: { value: string; label: string; description?: string }[];
+  }[];
+}) {
+  return (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={stackTriggerClass}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {groups.map((g) => (
+            <SelectGroup key={g.provider}>
+              <SelectLabel className="flex items-center gap-2">
+                <ProviderIcon provider={g.provider} className="size-3.5" />
+                {g.label}
+              </SelectLabel>
+              {g.models.map((m) => (
+                <SelectItem key={m.value} value={m.value}>
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+/**
+ * A simple picker where each option carries its own ProviderIcon. The submitted
+ * value is the option value.
+ */
+function IconOptionSelect({
   label,
   value,
   onChange,
@@ -56,18 +108,19 @@ function VoiceSelect({
   label: string;
   value: string;
   onChange: (v: string) => void;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; provider?: string }[];
 }) {
   return (
     <div>
       <FieldLabel>{label}</FieldLabel>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="h-11 w-full rounded-xl border-[1.5px] border-input">
+        <SelectTrigger className={stackTriggerClass}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           {options.map((o) => (
             <SelectItem key={o.value} value={o.value}>
+              {o.provider ? <ProviderIcon provider={o.provider} className="size-4" /> : null}
               {o.label}
             </SelectItem>
           ))}
@@ -77,7 +130,34 @@ function VoiceSelect({
   );
 }
 
-const toOptions = (xs: string[]) => xs.map((x) => ({ value: x, label: x }));
+// ── Catalog-derived option lists ──────────────────────────────────────────────
+
+const LLM_GROUPS = LLM_PROVIDER_GROUPS.map((g) => ({
+  provider: g.provider,
+  label: g.label,
+  models: g.models,
+}));
+
+const STT_GROUPS = STT_PROVIDER_GROUPS.map((g) => ({
+  provider: g.provider,
+  label: g.label,
+  models: g.models,
+}));
+
+// TTS submits the provider id (cartesia / elevenlabs / openai).
+const TTS_OPTIONS = TTS_PROVIDER_GROUPS.map((g) => ({
+  value: g.provider,
+  label: g.label,
+  provider: g.provider,
+}));
+
+// Voice submits the real voice id (Cartesia UUID); label stays human-readable.
+const VOICE_OPTIONS = VOICE_CATALOG.map((v) => ({
+  value: v.id,
+  label: `${v.name} · ${v.accent} ${v.gender}`,
+}));
+
+const LANGUAGE_OPTIONS = LANGUAGE_CATALOG.map((l) => ({ value: l.code, label: l.label }));
 
 export default function NewAgentPage() {
   const router = useRouter();
@@ -90,11 +170,11 @@ export default function NewAgentPage() {
   const [greetingMessage, setGreetingMessage] = React.useState("Hello! How can I help you today?");
   const [agentSpeaksFirst, setAgentSpeaksFirst] = React.useState(true);
 
-  const [llm, setLlm] = React.useState("gpt-4.1-mini");
-  const [stt, setStt] = React.useState("nova-3-general");
-  const [tts, setTts] = React.useState("cartesia");
-  const [voice, setVoice] = React.useState("Aria");
-  const [language, setLanguage] = React.useState("en");
+  const [llm, setLlm] = React.useState(DEFAULT_LLM_MODEL);
+  const [stt, setStt] = React.useState(DEFAULT_STT_MODEL);
+  const [tts, setTts] = React.useState<string>(DEFAULT_TTS_PROVIDER);
+  const [voice, setVoice] = React.useState(DEFAULT_VOICE_ID);
+  const [language, setLanguage] = React.useState(DEFAULT_LANGUAGE);
 
   const [creating, setCreating] = React.useState(false);
 
@@ -209,11 +289,11 @@ export default function NewAgentPage() {
           {/* right: voice stack */}
           <div className="space-y-4 rounded-2xl border-[1.5px] border-border bg-cream/30 p-5">
             <h3 className="eyebrow text-[10px] text-ink">Voice stack</h3>
-            <VoiceSelect label="LLM" value={llm} onChange={setLlm} options={toOptions(LLMS)} />
-            <VoiceSelect label="STT" value={stt} onChange={setStt} options={toOptions(STTS)} />
-            <VoiceSelect label="TTS" value={tts} onChange={setTts} options={toOptions(TTSS)} />
-            <VoiceSelect label="Voice" value={voice} onChange={setVoice} options={toOptions(VOICES)} />
-            <VoiceSelect label="Language" value={language} onChange={setLanguage} options={LANGUAGES} />
+            <GroupedModelSelect label="LLM" value={llm} onChange={setLlm} groups={LLM_GROUPS} />
+            <GroupedModelSelect label="STT" value={stt} onChange={setStt} groups={STT_GROUPS} />
+            <IconOptionSelect label="TTS" value={tts} onChange={setTts} options={TTS_OPTIONS} />
+            <IconOptionSelect label="Voice" value={voice} onChange={setVoice} options={VOICE_OPTIONS} />
+            <IconOptionSelect label="Language" value={language} onChange={setLanguage} options={LANGUAGE_OPTIONS} />
             <p className="text-[11.5px] leading-relaxed text-muted-foreground">
               Sensible defaults to start — tune the full pipeline in the builder after you create.
             </p>

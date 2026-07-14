@@ -17,9 +17,45 @@ import {
   Wrench,
 } from "lucide-react";
 import type { Agent, KnowledgeBase, ToolDef } from "@/types";
-import { api } from "@/lib/api-client";
+import {
+  api,
+  type AgentVersionPayload,
+  type ResponseLength,
+  type ToolConfigPayload,
+} from "@/lib/api-client";
 import { fmtAgo } from "@/lib/format";
 import { StatusChip } from "@/components/shared/status-chip";
+import { ProviderIcon } from "@/components/shared/provider-icon";
+import {
+  ALL_LLM_MODELS,
+  DEFAULT_LLM_MODEL,
+  LLM_PROVIDER_GROUPS,
+  getProviderForModel,
+} from "@/lib/llm-catalog";
+import {
+  ALL_STT_MODELS,
+  DEFAULT_STT_MODEL,
+  STT_PROVIDER_GROUPS,
+  getSTTProviderForModel,
+} from "@/lib/stt-catalog";
+import {
+  ALL_TTS_MODELS,
+  DEFAULT_TTS_MODEL,
+  DEFAULT_TTS_PROVIDER,
+  TTS_PROVIDER_GROUPS,
+} from "@/lib/tts-catalog";
+import {
+  DEFAULT_LANGUAGE,
+  DEFAULT_VOICE_ID,
+  DEFAULT_VOICE_SPEED,
+  LANGUAGE_CATALOG,
+  VOICE_CATALOG,
+} from "@/lib/voice-catalog";
+import {
+  DEFAULT_REALTIME_MODEL,
+  DEFAULT_REALTIME_PROVIDER,
+  DEFAULT_REALTIME_VOICE,
+} from "@/lib/realtime-catalog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -29,76 +65,64 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 
-const LLMS = ["openai/gpt-4.1-mini", "openai/gpt-4.1", "anthropic/claude-haiku-4-5", "anthropic/claude-sonnet-5", "google/gemini-2.5-flash", "groq/llama-4-70b"];
-const STTS = ["deepgram/nova-3", "assemblyai/universal", "azure/fast-v2", "openai/whisper-large-v3", "speechmatics/enhanced"];
-const TTSS = ["cartesia/sonic-2", "elevenlabs/turbo-v2", "deepgram/aura-2", "openai/tts-1-hd"];
-const VOICES = [
-  { name: "Meera", vibe: "Warm · considered", provider: "Cartesia" },
-  { name: "Arjun", vibe: "Bright · upbeat", provider: "Cartesia" },
-  { name: "Devi", vibe: "Calm · clinical", provider: "ElevenLabs" },
-  { name: "Kabir", vibe: "Deep · assured", provider: "ElevenLabs" },
-];
 const TRAITS = ["Warm", "Patient", "Direct", "Playful", "Formal", "Reassuring"];
+const CUSTOM_VARIABLES = ["customer_name", "company", "account_id"];
+type BackgroundNoise = "off" | "office" | "call_center" | "cafe";
 
-/**
- * Mint a new draft version for an agent and return its id.
- *
- * Publishing requires a `versionId`, so we snapshot the current editor config
- * into a fresh version first. The typed client (`api.ts`) exposes `publishAgent`
- * but no version-mint helper, so this issues the one missing org-scoped call
- * directly — same contract as the client's other mutations: same-origin base,
- * cookie credentials, and the `Origin` header the backend requires.
+/* ── Resolvers ────────────────────────────────────────────────────────────
+ * The stored agent may carry legacy identifiers (e.g. provider-prefixed model
+ * ids, display voice names, region-tagged languages). Coerce each into a valid
+ * catalog value so the controlled selects always start on a real option.
  */
-async function createAgentVersion(
-  agentId: string,
-  body: Record<string, unknown>,
-): Promise<string> {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-  const orgRes = await fetch(`${base}/api/auth/organization/list`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-  });
-  if (!orgRes.ok) {
-    throw new Error(`Failed to resolve active organization (${orgRes.status})`);
-  }
-  const orgs = (await orgRes.json().catch(() => null)) as Array<{ id: string }> | null;
-  const orgId = Array.isArray(orgs) ? orgs[0]?.id : undefined;
-  if (!orgId) throw new Error("No organization found for this session");
-
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (typeof window !== "undefined") headers.Origin = window.location.origin;
-
-  const res = await fetch(`${base}/api/orgs/${orgId}/agents/${agentId}/versions`, {
-    method: "POST",
-    credentials: "include",
-    headers,
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    let message = `Failed to create version (${res.status})`;
-    try {
-      const json = JSON.parse(text) as { error?: string; message?: string };
-      message = json.error ?? json.message ?? message;
-    } catch {
-      if (text) message = text;
-    }
-    throw new Error(message);
-  }
-
-  const json = (await res.json().catch(() => null)) as { version?: unknown } | null;
-  const version = json?.version as { id?: string; versionId?: string } | string | undefined;
-  const versionId =
-    typeof version === "string" ? version : version?.id ?? version?.versionId;
-  if (!versionId) throw new Error("Version created but no id was returned");
-  return versionId;
+function resolveLlm(value: string | undefined): string {
+  if (!value) return DEFAULT_LLM_MODEL;
+  const bare = value.includes("/") ? value.slice(value.lastIndexOf("/") + 1) : value;
+  return ALL_LLM_MODELS.some((m) => m.value === bare) ? bare : DEFAULT_LLM_MODEL;
 }
+
+function resolveStt(value: string | undefined): string {
+  if (!value) return DEFAULT_STT_MODEL;
+  const bare = value.includes("/") ? value.slice(value.lastIndexOf("/") + 1) : value;
+  return ALL_STT_MODELS.some((m) => m.value === bare) ? bare : DEFAULT_STT_MODEL;
+}
+
+function resolveTts(value: string | undefined): string {
+  if (!value) return DEFAULT_TTS_MODEL;
+  const bare = value.includes("/") ? value.slice(value.lastIndexOf("/") + 1) : value;
+  return ALL_TTS_MODELS.some((m) => m.value === bare) ? bare : DEFAULT_TTS_MODEL;
+}
+
+function ttsProviderForModel(modelValue: string): string {
+  return ALL_TTS_MODELS.find((m) => m.value === modelValue)?.provider ?? DEFAULT_TTS_PROVIDER;
+}
+
+function resolveVoice(value: string | undefined): string {
+  if (!value) return DEFAULT_VOICE_ID;
+  if (VOICE_CATALOG.some((v) => v.id === value)) return value;
+  const byName = VOICE_CATALOG.find((v) => v.name.toLowerCase() === value.toLowerCase());
+  return byName ? byName.id : DEFAULT_VOICE_ID;
+}
+
+function resolveLanguage(value: string | undefined): string {
+  if (!value) return DEFAULT_LANGUAGE;
+  if (LANGUAGE_CATALOG.some((l) => l.code === value)) return value;
+  const base = value.split("-")[0]!;
+  return LANGUAGE_CATALOG.some((l) => l.code === base) ? base : DEFAULT_LANGUAGE;
+}
+
+// STT models exposed in the builder must be real-time streaming.
+const STT_STREAMING_GROUPS = STT_PROVIDER_GROUPS.map((g) => ({
+  ...g,
+  models: g.models.filter((m) => m.streaming),
+})).filter((g) => g.models.length > 0);
 
 function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
@@ -127,31 +151,132 @@ export function AgentBuilder({
   tools: ToolDef[];
   kbs: KnowledgeBase[];
 }) {
-  const [traits, setTraits] = React.useState<string[]>(["Warm", "Patient"]);
+  // ── Persona ──
+  const [systemPrompt, setSystemPrompt] = React.useState(
+    agent.systemPrompt ?? "You are a helpful voice agent for your business…",
+  );
+  const [greeting, setGreeting] = React.useState(
+    agent.greetingMessage ?? "Hello! How can I help you today?",
+  );
   const [speaksFirst, setSpeaksFirst] = React.useState(agent.agentSpeaksFirst ?? true);
+  const [traits, setTraits] = React.useState<string[]>(["Warm", "Patient"]);
+  const [responseLength, setResponseLength] = React.useState<ResponseLength>("concise");
+
+  // ── Voice stack ──
+  const [llmModel, setLlmModel] = React.useState(() => resolveLlm(agent.voice.llm));
+  const [sttModel, setSttModel] = React.useState(() => resolveStt(agent.voice.stt));
+  const [ttsModel, setTtsModel] = React.useState(() => resolveTts(agent.voice.tts));
+  const [realtimeEnabled, setRealtimeEnabled] = React.useState(false);
+  const [voiceId, setVoiceId] = React.useState(() => resolveVoice(agent.voice.voice));
+  const [language, setLanguage] = React.useState(() => resolveLanguage(agent.voice.language));
+  const [speed, setSpeed] = React.useState([DEFAULT_VOICE_SPEED]);
+
+  // ── Call behavior ──
+  const [maxDuration, setMaxDuration] = React.useState(240);
+  const [inactivityTimeout, setInactivityTimeout] = React.useState(30);
   const [vad, setVad] = React.useState([0.3]);
-  const [speed, setSpeed] = React.useState([1.0]);
+  const [silenceIntro, setSilenceIntro] = React.useState(true);
+  const [disableBargeIn, setDisableBargeIn] = React.useState(false);
+  const [backgroundNoise, setBackgroundNoise] = React.useState<BackgroundNoise>("off");
+  const [goodbye, setGoodbye] = React.useState("Thank you for your time. Goodbye!");
+  const [voicemailOn, setVoicemailOn] = React.useState(true);
+  const [ivrOn, setIvrOn] = React.useState(false);
+
+  // ── Tools & knowledge ──
+  const attachableTools = React.useMemo(() => tools.slice(0, 4), [tools]);
+  const [selectedToolIds, setSelectedToolIds] = React.useState<string[]>(() =>
+    attachableTools.slice(0, 3).map((t) => t.id),
+  );
+  const [selectedKbIds, setSelectedKbIds] = React.useState<string[]>(() =>
+    kbs.slice(0, 1).map((k) => k.id),
+  );
+
   const [dirty, setDirty] = React.useState(false);
   const [publishing, setPublishing] = React.useState(false);
 
   const markDirty = () => setDirty(true);
 
+  const toggle = (
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    id: string,
+  ) => {
+    setter((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    markDirty();
+  };
+
+  const voicesForLanguage = React.useMemo(() => {
+    if (language === "multi") return VOICE_CATALOG;
+    const matches = VOICE_CATALOG.filter((v) => v.languages.includes(language));
+    return matches.length > 0 ? matches : VOICE_CATALOG;
+  }, [language]);
+
+  const buildPayload = (): AgentVersionPayload => {
+    const toolsConfig: ToolConfigPayload[] = attachableTools
+      .filter((t) => selectedToolIds.includes(t.id))
+      .map((t) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        method: t.method,
+        url: t.url,
+        parameters: {},
+        auth: { type: t.authType },
+        timeoutMs: t.timeoutMs,
+      }));
+
+    return {
+      label: `Edited via builder — ${new Date().toISOString().slice(0, 10)}`,
+      personaConfig: {
+        systemPrompt,
+        agentSpeaksFirst: speaksFirst,
+        greetingMessage: speaksFirst ? greeting : undefined,
+        personalityTraits: traits,
+        responseLengthPreference: responseLength,
+      },
+      voiceConfig: {
+        llmProvider: getProviderForModel(llmModel),
+        llmModel,
+        sttProvider: getSTTProviderForModel(sttModel),
+        sttModel,
+        ttsProvider: ttsProviderForModel(ttsModel),
+        ttsModel,
+        ttsVoice: voiceId,
+        language,
+        voiceSpeed: speed[0],
+        realtime: realtimeEnabled
+          ? {
+              enabled: true,
+              provider: DEFAULT_REALTIME_PROVIDER,
+              model: DEFAULT_REALTIME_MODEL,
+              voice: DEFAULT_REALTIME_VOICE,
+            }
+          : { enabled: false },
+      },
+      advancedConfig: {
+        maxCallDurationSecs: maxDuration,
+        inactivityTimeoutSecs: inactivityTimeout,
+        silenceDuringIntro: silenceIntro,
+        silenceWhenAgentSpeaks: disableBargeIn,
+        vad: { stopSecs: vad[0] },
+        backgroundNoise:
+          backgroundNoise === "off"
+            ? { enabled: false }
+            : { enabled: true, sound: backgroundNoise },
+        goodbyeMessage: goodbye,
+        voicemail: { enabled: voicemailOn },
+        ivrNavigation: { enabled: ivrOn },
+      },
+      toolsConfig,
+      knowledgeBaseBindings: selectedKbIds.map((knowledgeBaseId) => ({ knowledgeBaseId })),
+    };
+  };
+
   const publish = async () => {
     if (publishing) return;
     setPublishing(true);
     try {
-      const versionId = await createAgentVersion(agent.id, {
-        personaConfig: {
-          systemPrompt: agent.systemPrompt,
-          greetingMessage: agent.greetingMessage,
-          agentSpeaksFirst: speaksFirst,
-          traits,
-          speakingSpeed: speed[0],
-        },
-        voiceConfig: agent.voice,
-        behaviorConfig: { vadStopSec: vad[0] },
-      });
-      const published = await api.publishAgent(agent.id, versionId);
+      const version = await api.updateAgent(agent.id, buildPayload());
+      const published = await api.publishAgent(agent.id, version.id);
       setDirty(false);
       toast.success(`Published v${published.version}`, {
         description: "Now serving calls on all assigned numbers.",
@@ -246,13 +371,13 @@ export function AgentBuilder({
             <Panel title="The brain">
               <FieldLabel hint="Written for speech — short sentences, no markdown">System prompt</FieldLabel>
               <Textarea
-                defaultValue={agent.systemPrompt ?? "You are a helpful voice agent for your business…"}
-                onChange={markDirty}
+                value={systemPrompt}
+                onChange={(e) => { setSystemPrompt(e.target.value); markDirty(); }}
                 className="min-h-[220px] rounded-xl border-[1.5px] border-input bg-cream/50 text-[14px] leading-relaxed focus-visible:border-ink focus-visible:ring-ink/10"
               />
               <div className="mt-3 flex items-center gap-2 text-[11.5px] text-muted-foreground">
                 <Braces className="size-3.5" />
-                Variables available: {"{{patient_name}}"} · {"{{clinic}}"} · {"{{date}}"} · {"{{time}}"}
+                Variables available: {"{{customer_name}}"} · {"{{company}}"} · {"{{date}}"} · {"{{time}}"}
               </div>
             </Panel>
 
@@ -268,8 +393,8 @@ export function AgentBuilder({
                 <div className="mt-4">
                   <FieldLabel hint="Spoken exactly — bypasses the LLM. @slug plays a recording.">Greeting message</FieldLabel>
                   <Textarea
-                    defaultValue={agent.greetingMessage ?? "Hello! How can I help you today?"}
-                    onChange={markDirty}
+                    value={greeting}
+                    onChange={(e) => { setGreeting(e.target.value); markDirty(); }}
                     className="min-h-[64px] rounded-xl border-[1.5px] border-input text-[14px] focus-visible:border-ink focus-visible:ring-ink/10"
                   />
                 </div>
@@ -303,7 +428,7 @@ export function AgentBuilder({
               </div>
               <div className="mt-5">
                 <FieldLabel>Response length</FieldLabel>
-                <Select defaultValue="concise" onValueChange={markDirty}>
+                <Select value={responseLength} onValueChange={(v) => { setResponseLength(v as ResponseLength); markDirty(); }}>
                   <SelectTrigger className="h-11 rounded-xl border-[1.5px] border-input">
                     <SelectValue />
                   </SelectTrigger>
@@ -318,7 +443,7 @@ export function AgentBuilder({
 
             <Panel title="Custom variables">
               <div className="space-y-2.5">
-                {["patient_name", "clinic", "provider"].map((v) => (
+                {CUSTOM_VARIABLES.map((v) => (
                   <div key={v} className="flex items-center gap-2 rounded-lg bg-cream/70 px-3 py-2 font-mono text-[12.5px] text-ink">
                     <Braces className="size-3.5 text-forest" />
                     {"{{" + v + "}}"}
@@ -342,25 +467,81 @@ export function AgentBuilder({
           <div className="space-y-6">
             <Panel title="Pipeline">
               <div className="grid gap-5 sm:grid-cols-3">
-                {[
-                  ["LLM", LLMS, agent.voice.llm],
-                  ["STT", STTS, agent.voice.stt],
-                  ["TTS", TTSS, agent.voice.tts],
-                ].map(([label, options, value]) => (
-                  <div key={label as string}>
-                    <FieldLabel>{label}</FieldLabel>
-                    <Select defaultValue={value as string} onValueChange={markDirty}>
-                      <SelectTrigger className="h-11 w-full rounded-xl border-[1.5px] border-input">
+                {/* LLM */}
+                <div>
+                  <FieldLabel>LLM</FieldLabel>
+                  <Select value={llmModel} onValueChange={(v) => { setLlmModel(v); markDirty(); }}>
+                    <SelectTrigger className="h-11 w-full rounded-xl border-[1.5px] border-input">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <ProviderIcon provider={getProviderForModel(llmModel)} className="size-4" />
                         <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(options as string[]).map((o) => (
-                          <SelectItem key={o} value={o}>{o}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LLM_PROVIDER_GROUPS.map((g) => (
+                        <SelectGroup key={g.provider}>
+                          <SelectLabel className="flex items-center gap-2 text-muted-foreground">
+                            <ProviderIcon provider={g.provider} className="size-3.5" />
+                            {g.label}
+                          </SelectLabel>
+                          {g.models.map((m) => (
+                            <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {/* STT */}
+                <div>
+                  <FieldLabel>STT</FieldLabel>
+                  <Select value={sttModel} onValueChange={(v) => { setSttModel(v); markDirty(); }}>
+                    <SelectTrigger className="h-11 w-full rounded-xl border-[1.5px] border-input">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <ProviderIcon provider={getSTTProviderForModel(sttModel)} className="size-4" />
+                        <SelectValue />
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STT_STREAMING_GROUPS.map((g) => (
+                        <SelectGroup key={g.provider}>
+                          <SelectLabel className="flex items-center gap-2 text-muted-foreground">
+                            <ProviderIcon provider={g.provider} className="size-3.5" />
+                            {g.label}
+                          </SelectLabel>
+                          {g.models.map((m) => (
+                            <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {/* TTS */}
+                <div>
+                  <FieldLabel>TTS</FieldLabel>
+                  <Select value={ttsModel} onValueChange={(v) => { setTtsModel(v); markDirty(); }}>
+                    <SelectTrigger className="h-11 w-full rounded-xl border-[1.5px] border-input">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <ProviderIcon provider={ttsProviderForModel(ttsModel)} className="size-4" />
+                        <SelectValue />
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TTS_PROVIDER_GROUPS.map((g) => (
+                        <SelectGroup key={g.provider}>
+                          <SelectLabel className="flex items-center gap-2 text-muted-foreground">
+                            <ProviderIcon provider={g.provider} className="size-3.5" />
+                            {g.label}
+                          </SelectLabel>
+                          {g.models.map((m) => (
+                            <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="mt-6 flex items-center justify-between rounded-xl border-[1.5px] border-dashed border-ink/30 bg-cream/50 px-4 py-3.5">
                 <div>
@@ -369,19 +550,32 @@ export function AgentBuilder({
                     Replace STT + LLM + TTS with one realtime model (OpenAI Realtime / Gemini Live)
                   </div>
                 </div>
-                <Switch onCheckedChange={markDirty} />
+                <Switch checked={realtimeEnabled} onCheckedChange={(v) => { setRealtimeEnabled(v); markDirty(); }} />
               </div>
             </Panel>
 
             <Panel title="Voice">
+              <div className="mb-5">
+                <FieldLabel>Language</FieldLabel>
+                <Select value={language} onValueChange={(v) => { setLanguage(v); markDirty(); }}>
+                  <SelectTrigger className="h-11 w-full rounded-xl border-[1.5px] border-input">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LANGUAGE_CATALOG.map((l) => (
+                      <SelectItem key={l.code} value={l.code}>{l.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                {VOICES.map((v) => {
-                  const selected = v.name === agent.voice.voice;
+                {voicesForLanguage.map((v) => {
+                  const selected = v.id === voiceId;
                   return (
                     <button
-                      key={v.name}
+                      key={v.id}
                       type="button"
-                      onClick={markDirty}
+                      onClick={() => { setVoiceId(v.id); markDirty(); }}
                       className={`group flex items-center gap-3.5 rounded-2xl border-[1.5px] p-4 text-left transition-all ${
                         selected
                           ? "border-ink bg-lime/25 shadow-[3px_3px_0_var(--ink)]"
@@ -393,9 +587,9 @@ export function AgentBuilder({
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block font-display text-[14px] font-bold text-ink">{v.name}</span>
-                        <span className="block text-[11.5px] text-muted-foreground">{v.vibe} · {v.provider}</span>
+                        <span className="block text-[11.5px] text-muted-foreground capitalize">{v.accent} · {v.category}</span>
                       </span>
-                      <Play className="size-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                      <ProviderIcon provider="cartesia" className="size-4 text-muted-foreground" />
                     </button>
                   );
                 })}
@@ -424,11 +618,21 @@ export function AgentBuilder({
             <div className="grid gap-5 sm:grid-cols-2">
               <div>
                 <FieldLabel hint="30–7200">Max duration (s)</FieldLabel>
-                <Input type="number" defaultValue={240} onChange={markDirty} className="h-11 rounded-xl border-[1.5px] border-input" />
+                <Input
+                  type="number"
+                  value={maxDuration}
+                  onChange={(e) => { setMaxDuration(Number(e.target.value)); markDirty(); }}
+                  className="h-11 rounded-xl border-[1.5px] border-input"
+                />
               </div>
               <div>
                 <FieldLabel hint="5–300">Inactivity timeout (s)</FieldLabel>
-                <Input type="number" defaultValue={30} onChange={markDirty} className="h-11 rounded-xl border-[1.5px] border-input" />
+                <Input
+                  type="number"
+                  value={inactivityTimeout}
+                  onChange={(e) => { setInactivityTimeout(Number(e.target.value)); markDirty(); }}
+                  className="h-11 rounded-xl border-[1.5px] border-input"
+                />
               </div>
             </div>
             <div className="mt-6">
@@ -436,15 +640,14 @@ export function AgentBuilder({
               <Slider value={vad} onValueChange={(v) => { setVad(v); markDirty(); }} min={0} max={1} step={0.05} />
             </div>
             <div className="mt-6 space-y-3">
-              {[
-                ["Stay silent during intro", true],
-                ["Disable barge-in while agent speaks", false],
-              ].map(([label, def]) => (
-                <div key={label as string} className="flex items-center justify-between rounded-xl bg-cream/70 px-4 py-3">
-                  <span className="text-[13px] font-medium text-ink">{label}</span>
-                  <Switch defaultChecked={def as boolean} onCheckedChange={markDirty} />
-                </div>
-              ))}
+              <div className="flex items-center justify-between rounded-xl bg-cream/70 px-4 py-3">
+                <span className="text-[13px] font-medium text-ink">Stay silent during intro</span>
+                <Switch checked={silenceIntro} onCheckedChange={(v) => { setSilenceIntro(v); markDirty(); }} />
+              </div>
+              <div className="flex items-center justify-between rounded-xl bg-cream/70 px-4 py-3">
+                <span className="text-[13px] font-medium text-ink">Disable barge-in while agent speaks</span>
+                <Switch checked={disableBargeIn} onCheckedChange={(v) => { setDisableBargeIn(v); markDirty(); }} />
+              </div>
             </div>
           </Panel>
 
@@ -453,7 +656,7 @@ export function AgentBuilder({
               <div className="grid gap-5 sm:grid-cols-2">
                 <div>
                   <FieldLabel>Background noise</FieldLabel>
-                  <Select defaultValue="off" onValueChange={markDirty}>
+                  <Select value={backgroundNoise} onValueChange={(v) => { setBackgroundNoise(v as BackgroundNoise); markDirty(); }}>
                     <SelectTrigger className="h-11 w-full rounded-xl border-[1.5px] border-input"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="off">Off</SelectItem>
@@ -465,7 +668,11 @@ export function AgentBuilder({
                 </div>
                 <div>
                   <FieldLabel>Goodbye message</FieldLabel>
-                  <Input defaultValue="Thank you for your time. Goodbye!" onChange={markDirty} className="h-11 rounded-xl border-[1.5px] border-input" />
+                  <Input
+                    value={goodbye}
+                    onChange={(e) => { setGoodbye(e.target.value); markDirty(); }}
+                    className="h-11 rounded-xl border-[1.5px] border-input"
+                  />
                 </div>
               </div>
             </Panel>
@@ -477,7 +684,7 @@ export function AgentBuilder({
                     <div className="text-[13px] font-semibold text-ink">Voicemail detection</div>
                     <div className="text-[11px] text-muted-foreground">Leave message after 2.0s delay</div>
                   </div>
-                  <Switch defaultChecked onCheckedChange={markDirty} />
+                  <Switch checked={voicemailOn} onCheckedChange={(v) => { setVoicemailOn(v); markDirty(); }} />
                 </div>
                 <div className="flex items-center justify-between rounded-xl bg-cream/70 px-4 py-3">
                   <div>
@@ -486,7 +693,7 @@ export function AgentBuilder({
                     </div>
                     <div className="text-[11px] text-muted-foreground">Press keys through phone menus toward a goal (outbound)</div>
                   </div>
-                  <Switch onCheckedChange={markDirty} />
+                  <Switch checked={ivrOn} onCheckedChange={(v) => { setIvrOn(v); markDirty(); }} />
                 </div>
               </div>
             </Panel>
@@ -497,12 +704,15 @@ export function AgentBuilder({
         <TabsContent value="grounding" className="grid gap-6 lg:grid-cols-2">
           <Panel title="Attached tools">
             <div className="space-y-2.5">
-              {tools.slice(0, 4).map((t, i) => (
+              {attachableTools.map((t) => (
                 <label
                   key={t.id}
                   className="flex cursor-pointer items-center gap-3.5 rounded-xl border-[1.5px] border-border bg-paper p-3.5 transition-colors hover:border-ink has-[[data-state=checked]]:border-ink has-[[data-state=checked]]:bg-lime/15"
                 >
-                  <Checkbox defaultChecked={i < 3} onCheckedChange={markDirty} />
+                  <Checkbox
+                    checked={selectedToolIds.includes(t.id)}
+                    onCheckedChange={() => toggle(setSelectedToolIds, t.id)}
+                  />
                   <span className="flex size-8 items-center justify-center rounded-lg bg-sand">
                     <Wrench className="size-3.5 text-ink" />
                   </span>
@@ -521,12 +731,15 @@ export function AgentBuilder({
 
           <Panel title="Knowledge bases">
             <div className="space-y-2.5">
-              {kbs.map((kb, i) => (
+              {kbs.map((kb) => (
                 <label
                   key={kb.id}
                   className="flex cursor-pointer items-center gap-3.5 rounded-xl border-[1.5px] border-border bg-paper p-3.5 transition-colors hover:border-ink has-[[data-state=checked]]:border-ink has-[[data-state=checked]]:bg-lime/15"
                 >
-                  <Checkbox defaultChecked={i === 0} onCheckedChange={markDirty} />
+                  <Checkbox
+                    checked={selectedKbIds.includes(kb.id)}
+                    onCheckedChange={() => toggle(setSelectedKbIds, kb.id)}
+                  />
                   <span className="flex size-8 items-center justify-center rounded-lg bg-sand">
                     <BookOpen className="size-3.5 text-ink" />
                   </span>
@@ -553,7 +766,7 @@ export function AgentBuilder({
               {[
                 { v: agent.version, note: "Tightened greeting; added holiday-hours KB", when: agent.updatedAt, active: true },
                 { v: agent.version - 1, note: "Raised VAD stop to 0.3s after barge-in reports", when: "2026-07-08T10:00:00Z", active: false },
-                { v: agent.version - 2, note: "Swapped TTS voice to Meera", when: "2026-06-30T15:20:00Z", active: false },
+                { v: agent.version - 2, note: "Swapped TTS voice", when: "2026-06-30T15:20:00Z", active: false },
                 { v: agent.version - 3, note: "Initial production publish", when: "2026-06-21T09:00:00Z", active: false },
               ].map((ver, i) => (
                 <div key={ver.v} className={`flex items-center gap-4 py-4 ${i > 0 ? "border-t border-border" : ""}`}>

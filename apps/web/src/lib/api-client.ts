@@ -84,11 +84,97 @@ export interface CreateAgentPayload {
   voice?: VoiceConfig;
 }
 
-export interface UpdateAgentPatch {
+/** Metadata-only patch (name / description / tags / status). */
+export interface UpdateAgentMetadata {
   name?: string;
-  description?: string;
+  description?: string | null;
   tags?: string[];
   status?: AgentStatus;
+}
+
+/* --------------------------------------------------------------------------
+ * Version config payloads.
+ *
+ * Editing an agent's behaviour is versioned: each save mints a new immutable
+ * version carrying the config blocks below. These mirror the backend's
+ * per-block schemas — kept as a local, dependency-free shape so this client
+ * doesn't reach into server packages.
+ * ------------------------------------------------------------------------ */
+
+export type ResponseLength = "concise" | "balanced" | "verbose";
+
+export interface PersonaConfigPayload {
+  systemPrompt: string;
+  agentSpeaksFirst: boolean;
+  greetingMessage?: string;
+  personalityTraits?: string[];
+  responseLengthPreference?: ResponseLength;
+}
+
+export interface RealtimeConfigPayload {
+  enabled: boolean;
+  provider?: string;
+  model?: string;
+  voice?: string;
+}
+
+export interface VoiceConfigPayload {
+  llmProvider: string;
+  llmModel: string;
+  sttProvider: string;
+  sttModel: string;
+  ttsProvider: string;
+  ttsModel?: string;
+  ttsVoice?: string;
+  language: string;
+  voiceSpeed?: number;
+  realtime?: RealtimeConfigPayload;
+}
+
+export interface AdvancedConfigPayload {
+  maxCallDurationSecs?: number;
+  inactivityTimeoutSecs?: number;
+  silenceDuringIntro?: boolean;
+  silenceWhenAgentSpeaks?: boolean;
+  vad?: { stopSecs?: number };
+  backgroundNoise?: { enabled: boolean; sound?: "office" | "call_center" | "cafe" };
+  goodbyeMessage?: string;
+  voicemail?: { enabled: boolean };
+  ivrNavigation?: { enabled: boolean };
+}
+
+export interface ToolConfigPayload {
+  id: string;
+  name: string;
+  description: string;
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  url: string;
+  parameters?: Record<string, unknown>;
+  auth?: { type: "none" | "api_key" | "bearer" };
+  timeoutMs?: number;
+}
+
+export interface KnowledgeBaseBindingPayload {
+  knowledgeBaseId: string;
+  chunksToRetrieve?: number;
+  similarityThreshold?: number;
+}
+
+/** Payload that mints a new agent version snapshotting the editor state. */
+export interface AgentVersionPayload {
+  label?: string;
+  personaConfig?: PersonaConfigPayload;
+  voiceConfig?: VoiceConfigPayload;
+  advancedConfig?: AdvancedConfigPayload;
+  toolsConfig?: ToolConfigPayload[];
+  knowledgeBaseBindings?: KnowledgeBaseBindingPayload[];
+}
+
+/** An immutable agent version as returned by the create-version endpoint. */
+export interface AgentVersion {
+  id: string;
+  versionNumber: number;
+  [key: string]: unknown;
 }
 
 export interface TestSession {
@@ -99,8 +185,17 @@ export interface TestSession {
 /** Browser-side mutation methods. Import this from Client Components. */
 export const api = {
   createAgent: (payload: CreateAgentPayload) => mutate<Agent>("/agents", "POST", payload),
-  updateAgent: (id: string, patch: UpdateAgentPatch) =>
+  /** Patch agent metadata (name / description / tags / status). */
+  updateAgentMetadata: (id: string, patch: UpdateAgentMetadata) =>
     mutate<Agent>(`/agents/${id}`, "PATCH", patch),
+  /**
+   * Save the editor state by minting a new immutable version. Returns the
+   * created version so the caller can publish it with {@link publishAgent}.
+   */
+  updateAgent: (id: string, payload: AgentVersionPayload) =>
+    mutate<{ version: AgentVersion }>(`/agents/${id}/versions`, "POST", payload).then(
+      (r) => r.version,
+    ),
   publishAgent: (id: string, versionId: string) =>
     mutate<Agent>(`/agents/${id}/publish`, "POST", { versionId }),
   archiveAgent: (id: string) => mutate<Agent>(`/agents/${id}/archive`, "POST", {}),
