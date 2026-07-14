@@ -1,0 +1,328 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ────────────────────────────────────────────────────────────
+   Vaani design language — "warm editorial fintech"
+   Cream paper canvas · ink type · forest + lime accents
+   Display: Inter Tight (700–900) · Body: Inter
+   ──────────────────────────────────────────────────────────── */
+
+:root {
+  /* brand */
+  --lime: #9fe870;
+  --forest: #163300;
+  --forest-soft: #1e4207;
+  --yellow: #f3c53a;
+  --orange: #ff6b47;
+  --ink: #0e0f0c;
+  --ink-soft: #2e3339;
+  --paper: #fffdf8;
+  --cream: #f6f2e8;
+  --sand: #efeadd;
+
+  /* shadcn tokens */
+  --background: var(--cream);
+  --foreground: var(--ink);
+  --card: var(--paper);
+  --card-foreground: var(--ink);
+  --popover: var(--paper);
+  --popover-foreground: var(--ink);
+  --primary: var(--lime);
+  --primary-foreground: var(--forest);
+  --secondary: var(--ink);
+  --secondary-foreground: var(--paper);
+  --muted: var(--sand);
+  --muted-foreground: #6d7378;
+  --accent: #ede8da;
+  --accent-foreground: var(--ink);
+  --destructive: #d9412c;
+  --destructive-foreground: #fffdf8;
+  --border: #e4e1d9;
+  --input: #dcd8cc;
+  --ring: var(--forest);
+  --chart-1: #163300;
+  --chart-2: #9fe870;
+  --chart-3: #f3c53a;
+  --chart-4: #ff6b47;
+  --chart-5: #7a8b6f;
+  --radius: 1rem;
+
+  /* forest sidebar */
+  --sidebar: var(--forest);
+  --sidebar-foreground: #e9f3dc;
+  --sidebar-primary: var(--lime);
+  --sidebar-primary-foreground: var(--forest);
+  --sidebar-accent: #1e4207;
+  --sidebar-accent-foreground: #f1fbe3;
+  --sidebar-border: rgba(233, 243, 220, 0.14);
+  --sidebar-ring: var(--lime);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-lime: var(--lime);
+  --color-forest: var(--forest);
+  --color-forest-soft: var(--forest-soft);
+  --color-brand-yellow: var(--yellow);
+  --color-brand-orange: var(--orange);
+  --color-ink: var(--ink);
+  --color-paper: var(--paper);
+  --color-cream: var(--cream);
+  --color-sand: var(--sand);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-inter-tight), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 6px);
+  --radius-2xl: calc(var(--radius) + 12px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv11";
+  }
+  ::selection {
+    background: var(--lime);
+    color: var(--forest);
+  }
+}
+
+@layer components {
+  /* uppercase micro-label with wide tracking */
+  .eyebrow {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  /* display headings */
+  .display {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.04;
+  }
+
+  /* white pill with ink border + hard offset shadow */
+  .sticker {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    background: var(--paper);
+    color: var(--ink);
+    padding: 6px 14px;
+    border: 1.5px solid var(--ink);
+    border-radius: 999px;
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+
+  /* numeric readouts */
+  .figure {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  .pulse-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--lime);
+    animation: vaani-pulse 2s infinite;
+  }
+  .pulse-dot-live {
+    background: var(--orange);
+    animation-name: vaani-pulse-orange;
+  }
+}
+
+@keyframes vaani-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(159, 232, 112, 0.8);
+  }
+  70% {
+    box-shadow: 0 0 0 9px rgba(159, 232, 112, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(159, 232, 112, 0);
+  }
+}
+
+@keyframes vaani-pulse-orange {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 107, 71, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 9px rgba(255, 107, 71, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 107, 71, 0);
+  }
+}
+
+@keyframes word-up {
+  to {
+    transform: translateY(0);
+  }
+}
+
+.word-reveal {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  line-height: 1.08;
+}
+.word-reveal > span {
+  display: inline-block;
+  transform: translateY(110%);
+  animation: word-up 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.word-reveal:nth-child(1) > span {
+  animation-delay: 0.05s;
+}
+.word-reveal:nth-child(2) > span {
+  animation-delay: 0.13s;
+}
+.word-reveal:nth-child(3) > span {
+  animation-delay: 0.21s;
+}
+.word-reveal:nth-child(4) > span {
+  animation-delay: 0.29s;
+}
+.word-reveal:nth-child(5) > span {
+  animation-delay: 0.37s;
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.marquee-track {
+  display: flex;
+  gap: 48px;
+  width: max-content;
+  animation: marquee 28s linear infinite;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise-in {
+  animation: rise-in 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.rise-in-1 {
+  animation-delay: 0.05s;
+}
+.rise-in-2 {
+  animation-delay: 0.12s;
+}
+.rise-in-3 {
+  animation-delay: 0.19s;
+}
+.rise-in-4 {
+  animation-delay: 0.26s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .word-reveal > span,
+  .rise-in,
+  .marquee-track,
+  .pulse-dot {
+    animation: none;
+    transform: none;
+  }
+}
+
+/* React Flow re-skin */
+.react-flow__attribution {
+  display: none;
+}
+.react-flow__edge-path {
+  stroke: var(--ink-soft);
+  stroke-width: 1.5;
+}
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--forest);
+  stroke-width: 2.5;
+}
+.react-flow__handle {
+  width: 10px;
+  height: 10px;
+  background: var(--lime);
+  border: 1.5px solid var(--ink);
+}
+.react-flow__controls {
+  border: 1.5px solid var(--ink);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.react-flow__controls-button {
+  background: var(--paper);
+  border-bottom: 1px solid var(--border);
+}
+.react-flow__controls-button:hover {
+  background: var(--sand);
+}
